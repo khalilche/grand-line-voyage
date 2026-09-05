@@ -3587,36 +3587,36 @@ export class ToriToriPhoenix extends DevilFruit {
         const perHit = 6;
         const SLASHES = 25, EVERY = 0.2;
 
-        // --- the slash storm ---
+        // --- the slash storm — big, long, LOOSE blades scattered across a
+        // wide zone in front of you (not clustered on the player) ---
         let n = 0;
         const slash = () => {
           if (!this.transformed) return;                // stop if you leave phoenix form
-          const foes = c.combat.enemiesInRadius(c.controller.position, 14);
+          const fwd = _v2.set(Math.sin(c.controller.facing), 0, Math.cos(c.controller.facing));
+          const foes = c.combat.enemiesInRadius(c.controller.position, 16);
           let target;
-          if (foes.length) {
-            const f = foes[n % foes.length];
-            target = f.center.clone().add(_v.set((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.0, (Math.random() - 0.5) * 1.6));
+          if (foes.length && Math.random() < 0.6) {
+            // 60%: strike an enemy, with wide jitter so repeats don't stack
+            const f = foes[Math.floor(Math.random() * foes.length)];
+            target = f.center.clone().add(_v.set((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2.2, (Math.random() - 0.5) * 3));
           } else {
-            const fwd = _v2.set(Math.sin(c.controller.facing), 0, Math.cos(c.controller.facing));
-            target = c.controller.chest.clone().addScaledVector(fwd, 3 + Math.random() * 5);
-            target.x += (Math.random() - 0.5) * 3.5; target.z += (Math.random() - 0.5) * 3.5;
-            target.y += (Math.random() - 0.5) * 1.8;
+            // else: a random point across a big disc in front of you
+            const ang = Math.random() * 6.283, rad = 2 + Math.random() * 11;
+            target = c.controller.chest.clone().addScaledVector(fwd, 5);
+            target.x += Math.cos(ang) * rad;
+            target.z += Math.sin(ang) * rad;
+            target.y += (Math.random() - 0.5) * 5;
           }
-          // ONE slash per tick, styled from the reference sheet: a bright
-          // white-cored streak (camera-facing `slash` sprite, rolled to a
-          // random blade angle) + a dimmer blue glow streak behind it +
-          // dark ember shards scattered along it + a few blue spark lines.
-          // No rings, no cones — just the blade + debris.
-          const ang = Math.random() * Math.PI;                 // blade orientation (roll)
+          // ONE big blade per tick (ref sheet): a white-cored `slash` streak
+          // rolled to a random angle, over a broad blue glow blade, + dark
+          // impact shards flung along it + a blue spark trail. No rings/cones.
+          const ang = Math.random() * Math.PI;
           _up3.set(Math.cos(ang), Math.sin(ang), 0);
-          // blade: blue base -> white tip (ref gradient), over a broad blue glow
-          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 5.6, life: 0.28, spin: ang, color: PHX_DEEP, color2: PHX });
-          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 3.4, life: 0.18, spin: ang, color: PHX, color2: PHX_CORE });
-          // dark impact shards flung along the blade (this sells the "cut")
-          c.vfx.burst(target.clone(), { count: 16, tile: 3, color: 0x08080e, color2: 0x1c1c34, dir: _up3, cone: 2.0, speed: 7, size: 0.24, life: 0.5, gravity: 9, drag: 1.0 });
-          // a couple of blue spark trails
-          c.vfx.burst(target.clone(), { count: 4, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.4, speed: 15, size: 0.13, life: 0.26, gravity: 0, drag: 2 });
-          c.camera.addShake(0.04);
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 10 + Math.random() * 4, life: 0.32, spin: ang, color: PHX_DEEP, color2: PHX });
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 6.5 + Math.random() * 3, life: 0.22, spin: ang, color: PHX, color2: PHX_CORE });
+          c.vfx.burst(target.clone(), { count: 18, tile: 3, color: 0x07070d, color2: 0x1c1c34, dir: _up3, cone: 1.8, speed: 9, size: 0.28, life: 0.55, gravity: 10, drag: 0.9 });
+          c.vfx.burst(target.clone(), { count: 5, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.35, speed: 20, size: 0.14, life: 0.3, gravity: 0, drag: 1.6 });
+          c.camera.addShake(0.03);
           const hits = c.combat.areaStrike(target, {
             radius: 2.5, damage: perHit, knockback: 2, up: 0, stun: 0, color: PHX, shake: 0, silent: true,
             onHitTarget: (t) => c.combat.applyStatus(t, 'burn', { stacks: 1, duration: 2 })
@@ -3794,19 +3794,19 @@ export class ToriToriPhoenix extends DevilFruit {
     // draw the arc: 9 slash sprites swept from one side to the other, each a
     // touch delayed so it reads as a single blade travelling
     const baseYaw = Math.atan2(dir.x, dir.z);
-    for (let i = 0; i < 9; i++) {
-      const f = i / 8;                                   // 0..1 across the arc
+    for (let i = 0; i < 11; i++) {
+      const f = i / 10;                                  // 0..1 across the arc
       const a = baseYaw + (f - 0.5) * ARC;
-      const off = _v3.set(Math.sin(a), 0, Math.cos(a)).multiplyScalar(4.2);
-      off.y = Math.sin(f * Math.PI) * 1.4 - 0.2;         // bow the arc upward
-      this.schedule(i * 0.015, () => {
+      const off = _v3.set(Math.sin(a), 0, Math.cos(a)).multiplyScalar(7);
+      off.y = Math.sin(f * Math.PI) * 2.2 - 0.3;         // bow the arc upward
+      this.schedule(i * 0.014, () => {
         const p = chestAt().add(off);
         const roll = a - baseYaw + Math.PI / 2;
-        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 4.5, life: 0.22, spin: roll, color: PHX, color2: PHX_CORE });
-        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 6.5, life: 0.3, spin: roll, color: PHX_DEEP, color2: PHX });
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 13, life: 0.32, spin: roll, color: PHX_DEEP, color2: PHX });
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 8, life: 0.24, spin: roll, color: PHX, color2: PHX_CORE });
         _up3.set(Math.cos(roll), Math.sin(roll), 0);
-        c.vfx.burst(p.clone(), { count: 8, tile: 3, color: 0x0b0b16, color2: 0x1b1b30, dir: _up3, cone: 2.4, speed: 10, size: 0.18, life: 0.45, gravity: 8, drag: 1.1 });
-        c.vfx.burst(p.clone(), { count: 5, tile: 7, color: PHX_CORE, color2: PHX, dir: _up3, cone: 0.6, speed: 16, size: 0.14, life: 0.3, gravity: 0, drag: 2 });
+        c.vfx.burst(p.clone(), { count: 10, tile: 3, color: 0x08080e, color2: 0x1b1b30, dir: _up3, cone: 2.4, speed: 11, size: 0.22, life: 0.5, gravity: 9, drag: 1.0 });
+        c.vfx.burst(p.clone(), { count: 5, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.5, speed: 18, size: 0.15, life: 0.3, gravity: 0, drag: 1.8 });
       });
     }
     c.camera.addShake(0.5);
