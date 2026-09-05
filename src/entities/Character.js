@@ -244,10 +244,11 @@ export class Character {
 
     const g = new THREE.Group();
 
-    // ---- body aura: two soft pulsing shells around the torso ----
-    this._phxAura = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 2), auraMat);
-    this._phxAura.position.set(0, 1.15, 0);
-    this._phxAura.scale.set(0.9, 1.5, 0.9);
+    // ---- body aura: a soft glow hugging the TORSO only (kept small + dim so
+    // it doesn't wash the legs into a faceted-looking blob) ----
+    this._phxAura = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 3), auraMat);
+    this._phxAura.position.set(0, 1.25, 0);
+    this._phxAura.scale.set(0.8, 1.15, 0.8);
     g.add(this._phxAura);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 6, 20), bright);
     halo.rotation.x = Math.PI / 2; halo.position.set(0, 2.0, -0.05);
@@ -260,25 +261,28 @@ export class Character {
       g.add(c);
     }
 
-    // ---- wings: built pointing +X, mirrored left via scale.x ----
+    // ---- wings: a painted phoenix-wing texture (tools/gen-phoenix-wing.mjs)
+    // on a single plane per side. The texture points +X with its root at the
+    // left edge; the plane's origin is moved there so it pivots at the
+    // shoulder. The other wing is a pure `scale.x = -1` mirror — the two are
+    // pixel-identical, guaranteed symmetric. Additive so it glows like flame.
+    const wingTex = new THREE.TextureLoader().load('textures/fx/phoenix-wing.png');
+    wingTex.colorSpace = THREE.SRGBColorSpace;
+    const wingMat = new THREE.MeshBasicMaterial({
+      map: wingTex, transparent: true, blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide, depthWrite: false, opacity: 0.98
+    });
+    const wingGeo = new THREE.PlaneGeometry(5.4, 2.95);
+    wingGeo.translate(5.4 / 2 - 0.45, 0.18, 0);        // origin at the painted wing's root
     this._phxWings = [];
     for (const sgn of [-1, 1]) {
       const shoulder = new THREE.Group();
-      shoulder.position.set(sgn * 0.3, 1.4, -0.06);
-      shoulder.scale.x = sgn;
+      shoulder.position.set(sgn * 0.22, 1.5, -0.04);
+      shoulder.scale.x = sgn;                          // the ONLY difference — a pure mirror
+      const wing = new THREE.Mesh(wingGeo, wingMat);
+      shoulder.add(wing);
+      shoulder.userData = { sgn, wing };
       g.add(shoulder);
-      for (let f = 0; f < 6; f++) {
-        const m = f < 1 ? deep : f < 3 ? mid : bright;
-        const fe = plume(1.7 + f * 0.4, 0.85 - f * 0.06, 1.0, m);
-        fe.rotation.y = Math.PI * 0.5 + 0.18 + f * 0.15;
-        fe.rotation.z = 0.55 - f * 0.14;
-        shoulder.add(fe);
-      }
-      const lead = plume(3.4, 0.24, 1.3, bright);
-      lead.rotation.y = Math.PI * 0.5 + 0.04;
-      lead.rotation.z = 0.6;
-      shoulder.add(lead);
-      shoulder.userData = { sgn };
       this._phxWings.push(shoulder);
     }
 
@@ -704,10 +708,9 @@ export class Character {
     this.legR.ankle && (this.legR.ankle.rotation.x += 0.2 * w);
   }
 
-  /* Illusory phoenix: a few big clean flame WINGS do the whole silhouette.
-     The human's hands are hidden (setForm) and the arms tuck close to the
-     body. On transform `_phxAwakenT` adds a brief gentle unfurl on top of the
-     approved flap — nothing else about the rig changed. */
+  /* Illusory phoenix: a painted flame-wing plane per side, mirrored by
+     `scale.x = sgn` so the SAME rotations on both shoulder groups produce a
+     perfectly symmetric flap. `_phxAwakenT` adds a one-shot unfurl. */
   _animPhoenix(t, ctx) {
     const L = THREE.MathUtils;
     const fly = ctx.flying ? 1 : 0;
@@ -718,18 +721,20 @@ export class Character {
     g.position.set(0, bob, 0);
     g.rotation.set(fly ? L.clamp(-(ctx.vertVel || 0) * 0.02, -0.35, 0.35) : 0, 0, L.clamp((ctx.turn || 0) * -0.1, -0.35, 0.35));
 
-    // wings — broad flap; wider + faster in flight (approved). Unfurl only
-    // adds a one-shot extra sweep-open that eases away.
-    const rate = fly ? 6.5 : 3.4;
+    // wings — folded (ease 0) = swept back over the spine and small; open =
+    // spread wide, level, with a gentle flap. Same rotations both sides; the
+    // shoulder's scale.x = sgn mirrors them.
+    const rate = fly ? 5.0 : 2.6;
     const swing = Math.sin(t * rate);
-    const open = (fly ? 0.12 : 0.55) + (1 - ease) * 1.4;
-    const flap = (fly ? 0.6 : 0.2) * (0.35 + 0.65 * ease);
+    const openZ = fly ? 0.02 : 0.30;
+    const restZ = L.lerp(-1.5, openZ, ease);
+    const openY = L.lerp(-1.35, -0.38, ease);            // folded rotates the plane in behind the back
+    const flapAmp = (fly ? 0.5 : 0.16) * (0.3 + 0.7 * ease);
     for (const w of this._phxWings) {
-      const s = w.userData.sgn;
-      w.rotation.z = s * (open - swing * flap);
-      w.rotation.x = -0.12 + swing * 0.2;
-      w.rotation.y = s * (-0.18 - Math.max(0, -swing) * 0.14);
-      w.scale.setScalar(0.55 + 0.45 * ease);
+      w.rotation.z = restZ - swing * flapAmp;
+      w.rotation.y = openY - swing * 0.1;
+      w.rotation.x = -0.04 + swing * 0.05;
+      w.userData.wing.scale.setScalar(0.5 + 0.5 * ease);
     }
 
     // tail — streams back, sways (approved)
@@ -742,7 +747,7 @@ export class Character {
     // aura pulse + slow spin; halo bob (approved)
     if (this._phxAura) {
       const s = 1 + Math.sin(t * 4) * 0.07;
-      this._phxAura.scale.set(0.9 * s, 1.5 * s, 0.9 * s);
+      this._phxAura.scale.set(0.8 * s, 1.15 * s, 0.8 * s);
       this._phxAura.rotation.y = t * 0.7;
     }
     if (this._phxHalo) { this._phxHalo.position.y = 2.0 + Math.sin(t * 2.5) * 0.04; this._phxHalo.rotation.z = t * 1.2; }
