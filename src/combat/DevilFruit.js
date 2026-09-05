@@ -3854,38 +3854,40 @@ export class ToriToriPhoenix extends DevilFruit {
       // ash. ~3.3s total, gentle slow-mo so it reads. ----
       slow(c, 1.9, 0.55);
       c.camera.cine({
-        dist: 10, fov: 72,
-        focus: chest().add(_up.clone().multiplyScalar(1.4)), focusMix: 0.8,
-        spin: 1.7, pitchAdd: 0.32,
-        inT: 0.28, holdT: 1.9, outT: 1.15
+        dist: 9.5, fov: 64,
+        focus: chest().add(_up.clone().multiplyScalar(1.2)), focusMix: 0.8,
+        spin: 1.7, pitchAdd: 0.3,
+        inT: 0.32, holdT: 1.9, outT: 1.15
       });
 
       // ---- Phase 0: DEATH — the body goes to ash, a held breath ----
-      flash(c, 0.14, 0x0a1a2a); c.camera.addShake(0.25);
+      flash(c, 0.12, 0x0a1a2a); c.camera.addShake(0.25);
       c.vfx.burst(chest(), { count: 34, color: 0x22303a, color2: 0x101820, tile: 2, speed: 3, size: 0.55, life: 1.1, gravity: 7, drag: 1.3, dir: _up, cone: 2.7 });
       c.vfx.ring(chest(), { color: 0x1663d6, radius: 5, life: 0.28, vertical: false });   // implosion inward
 
-      // ---- Phase 1: IGNITION — pillar of blue fire erupts, wings unfurl ----
+      // ---- Phase 1: IGNITION — pillar of blue fire erupts, wings unfurl.
+      // Kept deliberately blue-cored (not white) and shorter so the CAMERA
+      // move stays the star, not a screen-filling white-out. ----
       this.schedule(0.32, () => {
         c.character?.phoenixAwaken();
         c.controller.velocity.y = Math.max(c.controller.velocity.y, 10);
-        flash(c, 0.16, 0xbfe0ff); c.camera.addShake(1.0); c.combat.hitstop(0.05);
-        c.vfx.flame(gp(), { radius: 3.4, height: 22, life: 1.5, color: PHX, core: 0xffffff });
-        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(4)), { kind: 'impact', size: 18, life: 0.5, color: 0xdff2ff });
-        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(9)), { kind: 'fire', size: 24, life: 1.6, color: PHX, rise: 3.4 });
+        flash(c, 0.11, 0x2f6fd0); c.camera.addShake(1.0); c.combat.hitstop(0.05);
+        c.vfx.flame(gp(), { radius: 2.4, height: 13, life: 1.4, color: PHX, core: PHX_CORE });
+        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(4)), { kind: 'impact', size: 10, life: 0.5, color: 0xdff2ff });
+        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(8)), { kind: 'fire', size: 15, life: 1.5, color: PHX, rise: 3.2 });
         c.vfx.decal(gp(), { kind: 'scorch', radius: 5.5, life: 9, groundY: gp().y });
-        c.vfx.burst(chest(), { count: 44, color: PHX_CORE, color2: 0xffffff, tile: 4, speed: 13, size: 0.34, life: 1.0, gravity: -3, drag: 1.7, dir: _up, cone: 1.3 });
+        c.vfx.burst(chest(), { count: 40, color: PHX_CORE, color2: PHX, tile: 4, speed: 13, size: 0.34, life: 1.0, gravity: -3, drag: 1.7, dir: _up, cone: 1.3 });
       });
 
       // ---- Phase 2: WINGS OPEN — a rebirth shockwave rolls out ----
       this.schedule(0.62, () => {
-        c.camera.addShake(0.8); flash(c, 0.12, 0xeaf6ff);
+        c.camera.addShake(0.8);
         c.vfx.dome(gp().add(_up), { radius: 12, life: 0.8, color: PHX_CORE });
         for (let w = 0; w < 4; w++) this.schedule(w * 0.05, () => {
           const rr = (w + 1) / 4 * 13;
           c.vfx.ring(gp(), { color: w % 2 ? PHX_CORE : PHX, radius: rr, life: 0.5 });
         });
-        c.vfx.burst(gp().add(_up), { count: 52, color: PHX_CORE, color2: PHX, tile: 4, speed: 17, size: 0.42, life: 1.2, gravity: 2, drag: 1.3, dir: _up, cone: 2.7 });
+        c.vfx.burst(gp().add(_up), { count: 44, color: PHX_CORE, color2: PHX, tile: 4, speed: 16, size: 0.4, life: 1.1, gravity: 2, drag: 1.3, dir: _up, cone: 2.7 });
         // a push, not an attack — stagger nearby foes as the wings snap open
         for (const t of c.combat.enemiesInRadius(gp(), 10)) {
           const away = t.center.clone().sub(c.controller.position).setY(0.25).normalize();
