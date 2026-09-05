@@ -216,112 +216,80 @@ export class Character {
     this.root.add(this.phoenix);
   }
 
-  /* ILLUSORY phoenix: NO bird model — the human stays, wrapped in additive
-     blue-flame WINGS built as a few big clean silhouette shapes (a filled
-     ShapeGeometry per wing, not a noisy stack of thin planes — that read as
-     a faceted crystal from bad angles), plus a soft body aura, a subtle
-     halo, a short crest and a back-trailing tail. */
+  /* ILLUSORY phoenix (approved rig — kept as-is): NO bird model, the human
+     stays, wrapped in great additive blue-flame wings, a body aura and a
+     streaming fire tail so the silhouette reads as a phoenix. All additive
+     planes, zero solid geometry. */
   _buildPhoenix() {
-    const mk = (hex, op) => new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: op, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false });
-    const core = mk(0xeaf6ff, 0.58);
-    const bright = mk(0x9fd6ff, 0.5);
-    const mid = mk(0x3f9be8, 0.4);
-    const deep = mk(0x1663d6, 0.26);
-    const auraMat = mk(0x2f9fe8, 0.14);
-    this._phxMats = { core, bright, mid, deep, auraMat };
-    this._phxAwakenT = 0;   // 1 -> 0 wing-unfurl timer, set by phoenixAwaken()
+    const bright = new THREE.MeshBasicMaterial({ color: 0xdff2ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false });
+    const mid = new THREE.MeshBasicMaterial({ color: 0x4fb0ff, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false });
+    const deep = new THREE.MeshBasicMaterial({ color: 0x1663d6, transparent: true, opacity: 0.34, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false });
+    const auraMat = new THREE.MeshBasicMaterial({ color: 0x2f9fe8, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false });
+    this._phxMats = { bright, mid, deep, auraMat };
+    this._phxAwakenT = 0;   // gentle wing-unfurl on transform (ticked in update())
 
-    // one clean swept-wing outline, pointing +X, span ~3.6, chord ~1.5
-    const wingShape = new THREE.Shape();
-    wingShape.moveTo(0, 0.34);
-    wingShape.quadraticCurveTo(1.6, 1.0, 3.5, 0.34);          // leading edge sweeps up to the tip
-    wingShape.lineTo(3.7, 0.02);                              // tip
-    wingShape.quadraticCurveTo(2.9, -0.42, 2.5, -0.12);       // scalloped trailing feathers
-    wingShape.quadraticCurveTo(2.05, -0.62, 1.65, -0.2);
-    wingShape.quadraticCurveTo(1.2, -0.72, 0.8, -0.26);
-    wingShape.quadraticCurveTo(0.4, -0.46, 0, -0.12);
-    wingShape.closePath();
-    const wingGeo = new THREE.ShapeGeometry(wingShape);
-    // a thin bright leading-edge sliver
-    const edgeShape = new THREE.Shape();
-    edgeShape.moveTo(0, 0.3); edgeShape.quadraticCurveTo(1.6, 0.96, 3.5, 0.3);
-    edgeShape.quadraticCurveTo(1.6, 0.78, 0, 0.16); edgeShape.closePath();
-    const edgeGeo = new THREE.ShapeGeometry(edgeShape);
-
-    const plume = (len, wid, mat) => {
-      const g = new THREE.PlaneGeometry(len, wid, 6, 1);
+    // a tapering, curled, edge-faded flame plane
+    const plume = (len, wid, curl, mat) => {
+      const g = new THREE.PlaneGeometry(len, wid, 8, 1);
       g.translate(len / 2, 0, 0);
       const p = g.attributes.position;
-      for (let v = 0; v < p.count; v++) p.setY(v, p.getY(v) * (1 - (p.getX(v) / len) * 0.85));
+      for (let v = 0; v < p.count; v++) {
+        const tt = p.getX(v) / len;
+        p.setY(v, p.getY(v) * (1 - tt * 0.9));      // taper to a point
+        p.setZ(v, -tt * tt * curl);                  // curl back
+      }
+      g.computeVertexNormals();
       return new THREE.Mesh(g, mat);
     };
 
     const g = new THREE.Group();
 
-    // ---- body aura: cool outer shell + a small hot inner core ----
-    this._phxAura = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 2), auraMat);
+    // ---- body aura: two soft pulsing shells around the torso ----
+    this._phxAura = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 2), auraMat);
     this._phxAura.position.set(0, 1.15, 0);
-    this._phxAura.scale.set(0.85, 1.5, 0.85);
+    this._phxAura.scale.set(0.9, 1.5, 0.9);
     g.add(this._phxAura);
-    this._phxAuraCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.26, 1), core);
-    this._phxAuraCore.position.set(0, 1.2, 0);
-    g.add(this._phxAuraCore);
-
-    // ---- single soft halo ----
-    this._phxHalo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.045, 6, 24), bright);
-    this._phxHalo.rotation.x = Math.PI / 2;
-    this._phxHalo.position.set(0, 2.02, -0.04);
-    g.add(this._phxHalo);
-
-    // ---- short crest: 3 clean tufts behind the head ----
-    this._phxCrest = [];
-    for (let i = 0; i < 3; i++) {
-      const cf = i - 1;
-      const c = plume(0.5 + (1 - Math.abs(cf)) * 0.32, 0.18, i === 1 ? bright : mid);
-      c.position.set(cf * 0.15, 1.78, -0.18);
-      c.rotation.z = 1.9; c.rotation.y = cf * 0.4;
-      g.add(c); this._phxCrest.push(c);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 6, 20), bright);
+    halo.rotation.x = Math.PI / 2; halo.position.set(0, 2.0, -0.05);
+    g.add(halo); this._phxHalo = halo;
+    // rising crest tufts behind the head
+    for (let i = 0; i < 4; i++) {
+      const c = plume(0.5 + i * 0.14, 0.22, 0.5, i % 2 ? bright : mid);
+      c.position.set((i - 1.5) * 0.12, 1.78, -0.16);
+      c.rotation.z = 1.9; c.rotation.y = (i - 1.5) * 0.18;
+      g.add(c);
     }
 
-    // ---- wings: one big silhouette + a soft oversized glow backing per side ----
+    // ---- wings: built pointing +X, mirrored left via scale.x ----
     this._phxWings = [];
     for (const sgn of [-1, 1]) {
       const shoulder = new THREE.Group();
-      shoulder.position.set(sgn * 0.26, 1.42, -0.05);
+      shoulder.position.set(sgn * 0.3, 1.4, -0.06);
       shoulder.scale.x = sgn;
-      shoulder.userData = { sgn };
       g.add(shoulder);
-
-      const glow = new THREE.Mesh(wingGeo, deep);
-      glow.scale.setScalar(1.28); glow.position.z = -0.08;
-      shoulder.add(glow);
-
-      const wing = new THREE.Mesh(wingGeo, mid);
-      shoulder.add(wing);
-
-      const inner = new THREE.Mesh(wingGeo, bright);
-      inner.scale.setScalar(0.62); inner.position.set(0.15, 0.04, 0.03);
-      shoulder.add(inner);
-
-      const edge = new THREE.Mesh(edgeGeo, core);
-      edge.position.z = 0.04;
-      shoulder.add(edge);
-
-      shoulder.userData.tipEmber = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), core);
-      shoulder.userData.tipEmber.position.set(3.5, 0.28, 0);
-      shoulder.add(shoulder.userData.tipEmber);
-
+      for (let f = 0; f < 6; f++) {
+        const m = f < 1 ? deep : f < 3 ? mid : bright;
+        const fe = plume(1.7 + f * 0.4, 0.85 - f * 0.06, 1.0, m);
+        fe.rotation.y = Math.PI * 0.5 + 0.18 + f * 0.15;
+        fe.rotation.z = 0.55 - f * 0.14;
+        shoulder.add(fe);
+      }
+      const lead = plume(3.4, 0.24, 1.3, bright);
+      lead.rotation.y = Math.PI * 0.5 + 0.04;
+      lead.rotation.z = 0.6;
+      shoulder.add(lead);
+      shoulder.userData = { sgn };
       this._phxWings.push(shoulder);
     }
 
-    // ---- tail: 3 clean ribbons trailing straight back ----
+    // ---- tail: long streaming fire ribbons ----
     this._phxTail = new THREE.Group();
-    this._phxTail.position.set(0, 1.05, -0.5);
+    this._phxTail.position.set(0, 1.0, -0.55);
     g.add(this._phxTail);
-    for (let i = -1; i <= 1; i++) {
-      const fe = plume(2.6 - Math.abs(i) * 0.5, 0.5 - Math.abs(i) * 0.1, Math.abs(i) < 1 ? bright : mid);
-      fe.rotation.y = Math.PI - i * 0.26;             // point back (-Z), fan slightly
-      fe.rotation.z = -0.12;
+    for (let i = -2; i <= 2; i++) {
+      const fe = plume(2.8 - Math.abs(i) * 0.4, 0.55 - Math.abs(i) * 0.06, 1.5, Math.abs(i) < 1 ? bright : mid);
+      fe.rotation.z = Math.PI - 0.2;
+      fe.rotation.y = i * 0.18;
       fe.userData.i = i;
       this._phxTail.add(fe);
     }
@@ -329,18 +297,15 @@ export class Character {
     return g;
   }
 
-  /** one-shot dramatic wing-unfurl on transforming into the phoenix */
+  /** gentle one-shot wing-unfurl the moment you transform into the phoenix */
   phoenixAwaken() { this._phxAwakenT = 1; }
 
   /** name: 'gear5' | 'phoenix' | null */
   setForm(name) {
     this._form = name || null;
     this.gear5Hair.visible = name === 'gear5';
-    // phoenix is ILLUSORY — the human body stays visible, just wreathed in flame.
-    // The HANDS are hidden and the arms tuck in so the clean flame wings own
-    // the silhouette (see _animPhoenix).
+    // phoenix is ILLUSORY — the human body stays visible, just wreathed in flame
     this.phoenix.visible = name === 'phoenix';
-    this.setHands(name !== 'phoenix');
     this.torso.visible = true;
     this.root.scale.setScalar(name === 'gear5' ? 1.15 : name === 'phoenix' ? 1.04 : 1);
 
@@ -741,80 +706,52 @@ export class Character {
 
   /* Illusory phoenix: a few big clean flame WINGS do the whole silhouette.
      The human's hands are hidden (setForm) and the arms tuck close to the
-     body so nothing pokes through the wings. `_phxAwakenT` drives a one-shot
-     unfurl from folded-behind-the-back to full span. */
+     body. On transform `_phxAwakenT` adds a brief gentle unfurl on top of the
+     approved flap — nothing else about the rig changed. */
   _animPhoenix(t, ctx) {
     const L = THREE.MathUtils;
     const fly = ctx.flying ? 1 : 0;
     const g = this.phoenix;
+    const ease = 1 - this._phxAwakenT * this._phxAwakenT;   // 0 -> 1 as the awaken timer runs out
 
-    const unfurl = 1 - this._phxAwakenT;                 // 0 folded -> 1 open (ticked in update())
-    const ease = unfurl * unfurl * (3 - 2 * unfurl);     // smoothstep
-
-    const bob = fly ? Math.sin(t * 3.4) * 0.07 : Math.sin(t * 2.0) * 0.035;
+    const bob = fly ? Math.sin(t * 3.6) * 0.08 : Math.sin(t * 2.2) * 0.04;
     g.position.set(0, bob, 0);
-    g.rotation.set(fly ? L.clamp(-(ctx.vertVel || 0) * 0.02, -0.3, 0.3) : 0, 0, L.clamp((ctx.turn || 0) * -0.08, -0.3, 0.3));
+    g.rotation.set(fly ? L.clamp(-(ctx.vertVel || 0) * 0.02, -0.35, 0.35) : 0, 0, L.clamp((ctx.turn || 0) * -0.1, -0.35, 0.35));
 
-    // ---- wings: aligned, clean flap. Neutral pose = swept slightly back and
-    // level; flap rocks them up/down. Unfurl sweeps them from folded (rotated
-    // right back over the spine, scaled down) to full. ----
-    const rate = fly ? 5.5 : 3.0;
+    // wings — broad flap; wider + faster in flight (approved). Unfurl only
+    // adds a one-shot extra sweep-open that eases away.
+    const rate = fly ? 6.5 : 3.4;
     const swing = Math.sin(t * rate);
-    const foldZ = -2.0;                                  // folded: pointing up/back over the shoulders
-    const openZ = fly ? -0.05 : 0.16;                    // open: near-level, tips a touch up
-    const restZ = L.lerp(foldZ, openZ, ease);
-    const flapAmp = (fly ? 0.55 : 0.22) * ease;
-    const sweepBack = L.lerp(0.9, 0.12, ease);           // folded wings also rotate back on Y
+    const open = (fly ? 0.12 : 0.55) + (1 - ease) * 1.4;
+    const flap = (fly ? 0.6 : 0.2) * (0.35 + 0.65 * ease);
     for (const w of this._phxWings) {
       const s = w.userData.sgn;
-      w.rotation.set(
-        -0.06 + swing * 0.16 * (fly ? 1 : 0.5),          // x: slight forward/back rock
-        s * -sweepBack,                                   // y: swept back, less as it opens
-        s * (restZ - swing * flapAmp)                     // z: the flap
-      );
-      w.scale.setScalar(0.4 + 0.6 * ease);
-      if (w.userData.tipEmber) {
-        const f = 0.65 + 0.35 * Math.sin(t * 18 + s * 2);
-        w.userData.tipEmber.scale.setScalar(f * (0.6 + 0.4 * ease));
-        w.userData.tipEmber.material.opacity = 0.5 * f * ease;
-      }
+      w.rotation.z = s * (open - swing * flap);
+      w.rotation.x = -0.12 + swing * 0.2;
+      w.rotation.y = s * (-0.18 - Math.max(0, -swing) * 0.14);
+      w.scale.setScalar(0.55 + 0.45 * ease);
     }
 
-    // ---- tail: trails straight back, gentle sway ----
-    this._phxTail.rotation.x = (fly ? -0.28 : 0.1) + Math.sin(t * 1.8) * 0.08;
-    this._phxTail.rotation.z = Math.sin(t * 1.3) * 0.1;
-    this._phxTail.scale.setScalar(0.5 + 0.5 * ease);
+    // tail — streams back, sways (approved)
+    this._phxTail.rotation.x = (fly ? -0.32 : 0.12) + Math.sin(t * 2.0) * 0.1;
+    this._phxTail.rotation.z = Math.sin(t * 1.5) * 0.12;
     this._phxTail.children.forEach((fe, k) => {
-      fe.rotation.z = -0.12 + Math.sin(t * 2.6 + k) * 0.08;
+      fe.rotation.z = (Math.PI - 0.2) + Math.sin(t * 3 + k) * 0.09;
     });
 
-    // ---- aura + halo + crest ----
+    // aura pulse + slow spin; halo bob (approved)
     if (this._phxAura) {
-      const s = 1 + Math.sin(t * 3.6) * 0.06;
-      this._phxAura.scale.set(0.85 * s, 1.5 * s, 0.85 * s);
-      this._phxAura.rotation.y = t * 0.6;
+      const s = 1 + Math.sin(t * 4) * 0.07;
+      this._phxAura.scale.set(0.9 * s, 1.5 * s, 0.9 * s);
+      this._phxAura.rotation.y = t * 0.7;
     }
-    if (this._phxAuraCore) {
-      this._phxAuraCore.scale.setScalar((1 + Math.sin(t * 6) * 0.14) * (0.5 + 0.5 * ease));
-      this._phxAuraCore.rotation.y = -t;
-    }
-    if (this._phxHalo) {
-      this._phxHalo.position.y = 2.02 + Math.sin(t * 2.4) * 0.03;
-      this._phxHalo.rotation.z = t * 1.1;
-      this._phxHalo.scale.setScalar(0.6 + 0.4 * ease);
-    }
-    for (let i = 0; i < (this._phxCrest || []).length; i++) {
-      this._phxCrest[i].rotation.y = (i - 1) * 0.4 + Math.sin(t * 2.8 + i) * 0.06;
-    }
+    if (this._phxHalo) { this._phxHalo.position.y = 2.0 + Math.sin(t * 2.5) * 0.04; this._phxHalo.rotation.z = t * 1.2; }
 
-    // ---- human: hands are hidden; keep the arms tucked in close so they
-    // never poke out past the wings ----
-    this.armL.pivot.rotation.z += 0.16;
-    this.armR.pivot.rotation.z += -0.16;
-    this.armL.pivot.rotation.x += 0.12 + Math.sin(t * 1.6) * 0.03;
-    this.armR.pivot.rotation.x += 0.12 + Math.sin(t * 1.6 + 1) * 0.03;
-    this.armL.fore.rotation.x += -0.5;
-    this.armR.fore.rotation.x += -0.5;
+    // spread the human's arms into wing bones (approved)
+    this.armL.pivot.rotation.z += 1.05 + swing * 0.12;
+    this.armR.pivot.rotation.z += -1.05 - swing * 0.12;
+    this.armL.pivot.rotation.x += -0.2;
+    this.armR.pivot.rotation.x += -0.2;
   }
 
   _poseIdle(w) {

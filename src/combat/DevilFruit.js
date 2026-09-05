@@ -3558,7 +3558,7 @@ export class ToriToriPhoenix extends DevilFruit {
       rarity: 'epico', type: 'zoan',
       passive: 'Solo ataca en forma Fénix · vuela mientras está transformado · regeneración'
     });
-    this.transformDmg = 1.55; this.transformSpeed = 1.35; this.transformRegen = 16;
+    this.transformDmg = 1.55; this.transformSpeed = 1.5; this.transformRegen = 16;
     this.abilitiesNeedForm = true;   // abilities locked until transformed
     this.noAura = true;              // the phoenix form is already made of flame
     this._immortalT = 0;
@@ -3840,6 +3840,9 @@ export class ToriToriPhoenix extends DevilFruit {
   onForm(c, on) {
     c.character?.setForm(on ? 'phoenix' : null);
     c.controller.flying = on;
+    // agility: the phoenix is FAST and nimble in the air
+    c.controller.flySpeed = on ? 24 : 15;
+    c.controller.flyVertSpeed = on ? 16 : 11;
     if (on) {
       this._ctx = c;
       this._revivedThisForm = false;
@@ -3849,45 +3852,43 @@ export class ToriToriPhoenix extends DevilFruit {
       const chest = () => c.controller.chest.clone();
       const gp = () => { const p = c.controller.position.clone(); p.y = gY(c, p.x, p.z); return p; };
 
-      // ---- ONE long sweeping cinematic across the whole rebirth: pull back
-      // and orbit while craning UP to follow the phoenix rising out of the
-      // ash. ~3.3s total, gentle slow-mo so it reads. ----
-      slow(c, 1.9, 0.55);
+      // ---- Sweeping rebirth cinematic: pull back + orbit while craning up to
+      // follow the phoenix rising out of the ash. Gentle slow-mo so it reads.
+      // No screen-filling pillar — the CAMERA is the spectacle. ----
+      slow(c, 1.6, 0.58);
       c.camera.cine({
-        dist: 9.5, fov: 64,
-        focus: chest().add(_up.clone().multiplyScalar(1.2)), focusMix: 0.8,
-        spin: 1.7, pitchAdd: 0.3,
-        inT: 0.32, holdT: 1.9, outT: 1.15
+        dist: 9, fov: 62,
+        focus: chest().add(_up.clone().multiplyScalar(1.1)), focusMix: 0.8,
+        spin: 1.6, pitchAdd: 0.28,
+        inT: 0.32, holdT: 1.7, outT: 1.1
       });
 
       // ---- Phase 0: DEATH — the body goes to ash, a held breath ----
-      flash(c, 0.12, 0x0a1a2a); c.camera.addShake(0.25);
-      c.vfx.burst(chest(), { count: 34, color: 0x22303a, color2: 0x101820, tile: 2, speed: 3, size: 0.55, life: 1.1, gravity: 7, drag: 1.3, dir: _up, cone: 2.7 });
-      c.vfx.ring(chest(), { color: 0x1663d6, radius: 5, life: 0.28, vertical: false });   // implosion inward
+      flash(c, 0.1, 0x0a1a2a); c.camera.addShake(0.25);
+      c.vfx.burst(chest(), { count: 30, color: 0x22303a, color2: 0x101820, tile: 2, speed: 2.6, size: 0.5, life: 1.0, gravity: 7, drag: 1.4, dir: _up, cone: 2.6 });
+      c.vfx.ring(chest(), { color: 0x1663d6, radius: 4.5, life: 0.26, vertical: false });   // implosion inward
 
-      // ---- Phase 1: IGNITION — pillar of blue fire erupts, wings unfurl.
-      // Kept deliberately blue-cored (not white) and shorter so the CAMERA
-      // move stays the star, not a screen-filling white-out. ----
+      // ---- Phase 1: IGNITION — a compact flare-pop, wings unfurl, you rise ----
       this.schedule(0.32, () => {
         c.character?.phoenixAwaken();
-        c.controller.velocity.y = Math.max(c.controller.velocity.y, 10);
-        flash(c, 0.11, 0x2f6fd0); c.camera.addShake(1.0); c.combat.hitstop(0.05);
-        c.vfx.flame(gp(), { radius: 2.4, height: 13, life: 1.4, color: PHX, core: PHX_CORE });
-        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(4)), { kind: 'impact', size: 10, life: 0.5, color: 0xdff2ff });
-        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(8)), { kind: 'fire', size: 15, life: 1.5, color: PHX, rise: 3.2 });
-        c.vfx.decal(gp(), { kind: 'scorch', radius: 5.5, life: 9, groundY: gp().y });
-        c.vfx.burst(chest(), { count: 40, color: PHX_CORE, color2: PHX, tile: 4, speed: 13, size: 0.34, life: 1.0, gravity: -3, drag: 1.7, dir: _up, cone: 1.3 });
+        c.controller.velocity.y = Math.max(c.controller.velocity.y, 9);
+        flash(c, 0.1, 0x3f8bff); c.camera.addShake(0.9); c.combat.hitstop(0.05);
+        c.vfx.flame(chest(), { radius: 1.6, height: 4, life: 1.0, color: PHX, core: PHX_CORE });
+        c.vfx.flipbook(chest().add(_up.clone().multiplyScalar(0.6)), { kind: 'impact', size: 7, life: 0.45, color: 0xdff2ff });
+        c.vfx.decal(gp(), { kind: 'scorch', radius: 5, life: 9, groundY: gp().y });
+        c.vfx.burst(chest(), { count: 36, color: PHX_CORE, color2: PHX, tile: 4, speed: 12, size: 0.32, life: 1.0, gravity: -3, drag: 1.8, dir: _up, cone: 1.2 });
       });
 
-      // ---- Phase 2: WINGS OPEN — a rebirth shockwave rolls out ----
-      this.schedule(0.62, () => {
-        c.camera.addShake(0.8);
-        c.vfx.dome(gp().add(_up), { radius: 12, life: 0.8, color: PHX_CORE });
-        for (let w = 0; w < 4; w++) this.schedule(w * 0.05, () => {
-          const rr = (w + 1) / 4 * 13;
+      // ---- Phase 2: WINGS OPEN — the rebirth shockwave rolls out (rings do
+      // the work, no dome/pillar covering the frame) ----
+      this.schedule(0.6, () => {
+        c.camera.addShake(0.7);
+        c.vfx.ring(chest(), { color: PHX_CORE, radius: 4, life: 0.4, vertical: true });   // the wing "snap"
+        for (let w = 0; w < 5; w++) this.schedule(w * 0.05, () => {
+          const rr = (w + 1) / 5 * 14;
           c.vfx.ring(gp(), { color: w % 2 ? PHX_CORE : PHX, radius: rr, life: 0.5 });
         });
-        c.vfx.burst(gp().add(_up), { count: 44, color: PHX_CORE, color2: PHX, tile: 4, speed: 16, size: 0.4, life: 1.1, gravity: 2, drag: 1.3, dir: _up, cone: 2.7 });
+        c.vfx.burst(gp().add(_up), { count: 40, color: PHX_CORE, color2: PHX, tile: 4, speed: 15, size: 0.4, life: 1.0, gravity: 2, drag: 1.4, dir: _up, cone: 2.6 });
         // a push, not an attack — stagger nearby foes as the wings snap open
         for (const t of c.combat.enemiesInRadius(gp(), 10)) {
           const away = t.center.clone().sub(c.controller.position).setY(0.25).normalize();
@@ -3895,11 +3896,11 @@ export class ToriToriPhoenix extends DevilFruit {
         }
       });
 
-      // ---- Phase 3: SETTLE — halo converges, sustained aura, buoyant hover ----
+      // ---- Phase 3: SETTLE — sustained aura, buoyant hover ----
       this.schedule(1.0, () => {
         c.controller.velocity.y = Math.max(c.controller.velocity.y, 6);
-        c.vfx.ring(chest(), { color: 0xdff2ff, radius: 3, life: 0.7, vertical: false });
-        c.vfx.flame(chest(), { radius: 1.9, height: 4.5, life: 0.9, color: PHX, core: PHX_CORE });
+        c.vfx.ring(chest(), { color: 0xdff2ff, radius: 2.6, life: 0.6, vertical: false });
+        c.vfx.flame(chest(), { radius: 1.6, height: 3.5, life: 0.8, color: PHX, core: PHX_CORE });
       });
     } else {
       this._immortalT = 0;
