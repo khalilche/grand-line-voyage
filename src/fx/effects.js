@@ -99,17 +99,26 @@ export class FlamePlume {
  * ------------------------------------------------------------------ */
 const DECAL_KIND = { scorch: 0, frost: 1, crack: 2, sand: 3 };
 export class GroundDecal {
-  constructor(scene, { pos, radius = 3, kind = 'scorch', life = 6, groundY } = {}) {
+  constructor(scene, { pos, radius = 3, kind = 'scorch', life = 6, groundY, color = null } = {}) {
     this.scene = scene; this.t = 0; this.life = life; this.dead = false;
     const geo = new THREE.CircleGeometry(radius, 40);
     geo.rotateX(-Math.PI / 2);
-    this.u = { uTime: { value: 0 }, uFade: { value: 0 }, uKind: { value: DECAL_KIND[kind] ?? 0 }, uSeed: { value: Math.random() * 10 } };
+    // `color` (optional): recolours the SCORCH kind — the soot is tinted toward
+    // this hue and the ember glow toward a brightened version of it, so an
+    // ability can leave e.g. a bluish "sacred burn" mark instead of the
+    // default brown+orange. `uTintOn` 0 = untouched default.
+    const tint = color != null ? new THREE.Color(color) : new THREE.Color(0x000000);
+    this.u = {
+      uTime: { value: 0 }, uFade: { value: 0 }, uKind: { value: DECAL_KIND[kind] ?? 0 }, uSeed: { value: Math.random() * 10 },
+      uTint: { value: tint }, uTintOn: { value: color != null ? 1 : 0 }
+    };
     this.mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, uniforms: this.u,
       vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
       fragmentShader: /* glsl */`
         precision highp float; varying vec2 vUv;
-        uniform float uTime, uFade, uKind, uSeed;
+        uniform float uTime, uFade, uKind, uSeed, uTintOn;
+        uniform vec3 uTint;
         ${GLSL_NOISE}
         void main(){
           vec2 p = (vUv - 0.5) * 2.0;
@@ -121,9 +130,11 @@ export class GroundDecal {
           vec3 col; float a = mask;
           if (uKind < 0.5) {                     // scorch
             float soot = fbm(p*3.0 + uSeed);
-            col = mix(vec3(0.05,0.04,0.03), vec3(0.16,0.12,0.10), soot);
+            vec3 sootLo = mix(vec3(0.05,0.04,0.03), uTint * 0.35, uTintOn);
+            vec3 sootHi = mix(vec3(0.16,0.12,0.10), uTint * 0.85, uTintOn);
+            col = mix(sootLo, sootHi, soot);
             float ember = smoothstep(0.9,1.0, r) * max(0.0, 1.0 - uTime*1.6);
-            col += vec3(1.0,0.4,0.1) * ember;
+            col += mix(vec3(1.0,0.4,0.1), uTint + vec3(0.35), uTintOn) * ember;
             a *= 0.9;
           } else if (uKind < 1.5) {              // frost
             float cr = fbm(p*5.0 + uSeed) + 0.4*fbm(p*12.0);
@@ -1523,40 +1534,59 @@ export class Flipbook {
     this.loop = !!o.loop;
     this.rise = o.rise ?? 0;
     this._pos = (o.pos || new THREE.Vector3()).clone();
+    // `spin`: true = random roll (old behaviour), a number = that exact roll (rad).
+    // `flat` + `yaw`: lay the sprite FLAT on the ground (world XZ plane) rotated
+    //   by `yaw`, instead of the default camera-facing billboard — lets a sweep
+    //   sprite actually follow a world-space arc direction.
+    // `color2`: if set, the sprite fades from `color` (trailing edge, vUv.x=0)
+    //   to `color2` (leading edge, vUv.x=1).
+    this._flat = !!o.flat;
     this.u = {
       uTex: { value: o.tex },
       uGrid: { value: new THREE.Vector2(o.cols ?? 4, o.rows ?? 4) },
       uFrame: { value: 0 },
       uColor: { value: new THREE.Color(o.color ?? 0xffffff) },
+      uColor2: { value: new THREE.Color(o.color2 ?? o.color ?? 0xffffff) },
+      uTwo: { value: o.color2 != null ? 1 : 0 },
       uAlpha: { value: 1 },
       uSize: { value: o.size ?? 4 },
-      uSpin: { value: o.spin ? (Math.random() - 0.5) * 6.28 : 0 },
+      uSpin: { value: typeof o.spin === 'number' ? o.spin : (o.spin ? (Math.random() - 0.5) * 6.28 : 0) },
+      uFlat: { value: this._flat ? 1 : 0 },
+      uYaw: { value: o.yaw ?? 0 },
     };
     this.mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false,
       blending: (o.additive === false ? THREE.NormalBlending : THREE.AdditiveBlending),
       uniforms: this.u,
       vertexShader: /* glsl */`
-        uniform float uSize, uSpin; varying vec2 vUv;
+        uniform float uSize, uSpin, uFlat, uYaw; varying vec2 vUv;
         void main(){
           vUv = uv;
           float s = sin(uSpin), c = cos(uSpin);
           vec2 q = mat2(c, -s, s, c) * position.xy;
-          vec3 camR = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
-          vec3 camU = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
-          vec3 wp = (modelMatrix * vec4(0.0,0.0,0.0,1.0)).xyz + (camR * q.x + camU * q.y) * uSize;
+          vec3 wp0 = (modelMatrix * vec4(0.0,0.0,0.0,1.0)).xyz;
+          vec3 wp;
+          if (uFlat > 0.5) {
+            float sy = sin(uYaw), cy = cos(uYaw);
+            wp = wp0 + vec3(q.x * cy - q.y * sy, 0.0, q.x * sy + q.y * cy) * uSize;
+          } else {
+            vec3 camR = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
+            vec3 camU = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
+            wp = wp0 + (camR * q.x + camU * q.y) * uSize;
+          }
           gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
         }`,
       fragmentShader: /* glsl */`
         precision highp float; varying vec2 vUv;
-        uniform sampler2D uTex; uniform vec2 uGrid; uniform float uFrame, uAlpha; uniform vec3 uColor;
+        uniform sampler2D uTex; uniform vec2 uGrid; uniform float uFrame, uAlpha, uTwo; uniform vec3 uColor, uColor2;
         void main(){
           float f = floor(uFrame);
           float col = mod(f, uGrid.x);
           float row = floor(f / uGrid.x);
           vec2 cell = (vUv + vec2(col, uGrid.y - 1.0 - row)) / uGrid;   // atlas row 0 = top
           vec4 t = texture2D(uTex, cell);
-          gl_FragColor = vec4(t.rgb * uColor, t.a * uAlpha);
+          vec3 tint = mix(uColor, mix(uColor, uColor2, vUv.x), uTwo);
+          gl_FragColor = vec4(t.rgb * tint, t.a * uAlpha);
         }`,
     });
     this.mesh = new THREE.Mesh(_QUAD, this.mat);

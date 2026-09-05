@@ -90,27 +90,45 @@ export class VFX {
 
   // ---------------- shock rings ----------------
   _initRings(n) {
-    const geo = new THREE.RingGeometry(0.7, 1.0, 40, 1);
-    geo.rotateX(-Math.PI / 2);
+    this._ringFullGeo = new THREE.RingGeometry(0.7, 1.0, 40, 1);
+    this._ringFullGeo.rotateX(-Math.PI / 2);
     for (let i = 0; i < n; i++) {
       const mat = new THREE.MeshBasicMaterial({
         color: 0xffffff, transparent: true, opacity: 0,
         depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
       });
-      const m = new THREE.Mesh(geo, mat);
+      const m = new THREE.Mesh(this._ringFullGeo, mat);
       m.visible = false;
       m.frustumCulled = false;
       this.scene.add(m);
-      this._rings.push({ m, life: 0, maxLife: 1, from: 0, to: 1 });
+      this._rings.push({ m, life: 0, maxLife: 1, from: 0, to: 1, arcGeo: null });
     }
   }
 
-  ring(pos, { color = 0xffffff, radius = 4, life = 0.5, thickness = 0.35, y = 0.15, vertical = false } = {}) {
+  /**
+   * `arc` (optional): render only a partial ring instead of a full circle.
+   *   { dir: Vector3, sweep: radians }  — a wedge of angular width `sweep`
+   *   centred on the flattened `dir` direction. Used for melee sweep arcs.
+   * When omitted the ring is a full 360° circle (the shared geometry).
+   */
+  ring(pos, { color = 0xffffff, radius = 4, life = 0.5, thickness = 0.35, y = 0.15, vertical = false, arc = null } = {}) {
     const r = this._rings[this._ringIdx = (this._ringIdx + 1) % this._rings.length];
     r.m.visible = true;
     r.m.position.copy(pos);
     r.m.position.y += y;
-    r.m.rotation.set(vertical ? Math.PI / 2 : 0, Math.random() * 6.28, 0);
+    if (arc && arc.sweep) {
+      const sweep = arc.sweep;
+      if (r.arcGeo) r.arcGeo.dispose();
+      r.arcGeo = new THREE.RingGeometry(0.7, 1.0, Math.max(8, Math.round(40 * sweep / (Math.PI * 2))), 1, -sweep / 2, sweep);
+      r.arcGeo.rotateX(-Math.PI / 2);
+      r.m.geometry = r.arcGeo;
+      // theta=0 of the geometry points at world +X; aim it along `arc.dir`
+      const d = arc.dir || _RING_FWD;
+      r.m.rotation.set(vertical ? Math.PI / 2 : 0, Math.atan2(-d.z, d.x), 0);
+    } else {
+      if (r.m.geometry !== this._ringFullGeo) r.m.geometry = this._ringFullGeo;
+      r.m.rotation.set(vertical ? Math.PI / 2 : 0, Math.random() * 6.28, 0);
+    }
     r.m.material.color.set(color);
     r.life = 0; r.maxLife = life; r.from = 0.2; r.to = radius; r.thick = thickness;
     r.m.material.opacity = 0.9;
@@ -299,4 +317,5 @@ const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
+const _RING_FWD = new THREE.Vector3(0, 0, 1);   // fallback aim dir for arc rings
 const _up = new THREE.Vector3(0, 1, 0);
