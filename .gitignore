@@ -16,3 +16,6 @@ server/*-tmp.mjs
 tools/pk-particles/
 tools/models-src/
 tools/shots/
+
+# intermediate art gen output
+tools/_*.svg
