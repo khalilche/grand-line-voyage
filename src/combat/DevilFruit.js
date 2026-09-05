@@ -3569,55 +3569,66 @@ export class ToriToriPhoenix extends DevilFruit {
 
     // === Z — ALETEO CORTANTE: a single-tick 200° melee wing-sweep. 12 dmg to
     // every enemy in the frontal arc (radius 4), heal 25% of the total damage
-    // dealt, knock each hit enemy 6 units outward. cd 2s. Art level 3.
-    // (Flight-resource bonus omitted — no flight stamina exists in the engine;
-    //  reported to the user rather than invented.) ===
+    // dealt, knock each hit enemy 6 units outward. cd 2s.
+    // Art level 5 (bumped from spec's 3 on user request): multi-beat layered
+    // choreography — windup gather -> the sweep (stacked arc rings + flat
+    // crescent sprite + feather body + spark rim + one short flash) -> per-hit
+    // impact stack -> drifting-ember aftermath. All anchored to the player's
+    // chest so it reads correctly while flying (phoenix form is always
+    // airborne); only the scorch decal stays on the ground.
+    // (Flight-resource bonus still omitted — no flight stamina in the engine.)
     const ARC = Math.PI * (200 / 180);
     this.slots.q = {
       name: 'Aleteo Cortante', cd: 2, _t: 0,
       cast: (c) => {
         c.pose('thrust');
-        const chest = c.controller.chest.clone();
+        const chestAt = () => c.controller.chest.clone();
         const dir = c.forwardFlat.clone().normalize();
+        const back = dir.clone().negate();
+        const yaw = Math.atan2(-dir.z, dir.x);
         const perHit = 12;
 
-        // --- mechanics: single tick, right now ---
+        // --- mechanics: SINGLE TICK at the cast (spec: "sin delay de viaje") ---
+        const chest = chestAt();
         const hitEnemies = [];
         const hits = c.combat.meleeStrike(chest, dir, {
           arc: ARC, range: 4, damage: perHit, knockback: 6, up: 0, stun: 0,
-          hitstop: 0.04, shake: 0.08, color: PHX,
+          hitstop: 0, shake: 0, color: PHX,
           onHitTarget: (t) => hitEnemies.push(t)
         });
         if (hits) c.combat.healPlayer(0.25 * perHit * c.combat.playerDamageMult * hits);
 
-        // --- VFX layer recipe (exact order + timing, t = cast) ---
-        // t=0 — base painted: 'shock' flipbook, flat on the ground, rolled to
-        // follow the sweep, PHX trailing edge -> PHX_CORE leading edge.
-        c.vfx.flipbook(chest.clone().setY(chest.y - 1.0), {
-          kind: 'shock', size: 5, life: 0.2, flat: true,
-          yaw: Math.atan2(-dir.z, dir.x), color: PHX, color2: PHX_CORE
-        });
-        // t=0.02 — shape: a 200° ring arc as the sweep's wake
-        this.schedule(0.02, () => c.vfx.ring(chest.clone(), {
-          color: PHX, radius: 4, life: 0.35, vertical: false,
-          arc: { dir, sweep: ARC }
-        }));
-        // t=0.04 — body: 20 rising feather particles (PHX_CORE -> PHX_DEEP)
-        // fired outward across the arc
-        this.schedule(0.04, () => c.vfx.burst(chest.clone(), {
-          count: 20, tile: 4, color: PHX_CORE, color2: PHX_DEEP,
-          dir, cone: ARC, speed: 9, size: 0.34, life: 1.1, gravity: -4, drag: 1.0
-        }));
-        // t=0.06 — accent: per hit enemy, a small clinging flame (0.4s) + a
-        // bluish "sacred burn" scorch decal
+        // --- Beat 1: the sweep, layered (t=0 -> 0.03), anchored at the chest ---
+        // wings compress inward then release
+        c.vfx.burst(chest.clone(), { count: 14, tile: 4, color: PHX_CORE, color2: PHX, dir: back, cone: 1.6, speed: 5, size: 0.28, life: 0.2, gravity: 0, drag: 6 });
+        // flat blue-flame crescent sprite at chest level, rolled to the sweep
+        c.vfx.flipbook(chest.clone(), { kind: 'shock', size: 6, life: 0.22, flat: true, yaw, color: PHX, color2: PHX_CORE });
+        // stacked arc rings: fast bright inner, then slower deep outer, then a vertical wing-plane cut
+        c.vfx.ring(chest.clone(), { color: PHX_CORE, radius: 4, life: 0.24, thickness: 0.5, vertical: false, arc: { dir, sweep: ARC } });
+        this.schedule(0.03, () => c.vfx.ring(chestAt(), { color: PHX_DEEP, radius: 5.5, life: 0.5, vertical: false, arc: { dir, sweep: ARC } }));
+        this.schedule(0.02, () => c.vfx.ring(chestAt(), { color: PHX, radius: 3.5, life: 0.3, vertical: true, arc: { dir, sweep: Math.PI * (120 / 180) } }));
+        // feather body + a sharp spark rim at the cutting edge
+        c.vfx.burst(chest.clone(), { count: 30, tile: 4, color: PHX_CORE, color2: PHX_DEEP, dir, cone: ARC, speed: 10, size: 0.4, life: 1.2, gravity: -4, drag: 1.0 });
+        c.vfx.burst(chest.clone(), { count: 16, tile: 3, color: PHX_CORE, color2: PHX, dir, cone: ARC, speed: 16, size: 0.18, life: 0.35, gravity: 2, drag: 3 });
+        c.camera.addShake(0.14);
+        if (hits) { c.combat.hitstop(0.05); flash(c, 0.12, PHX); }
+
+        // --- Beat 2: per-hit impact stack (t=0.06) ---
         this.schedule(0.06, () => {
           for (const t of hitEnemies) {
             if (!t || (t.dead && !t.isDummy)) continue;
-            c.vfx.flame(t.center.clone(), { radius: 0.5, height: 1.2, life: 0.4, color: PHX, core: PHX_CORE });
-            const g = t.center.clone(); g.y = gY(c, g.x, g.z);
+            const p = t.center.clone();
+            c.vfx.flipbook(p.clone(), { kind: 'impact', size: 4, life: 0.3, color: PHX_CORE });
+            c.vfx.flame(p.clone(), { radius: 0.6, height: 1.4, life: 0.5, color: PHX, core: PHX_CORE });
+            c.vfx.ring(p.clone(), { color: PHX_CORE, radius: 1.8, life: 0.3, vertical: true });
+            c.vfx.burst(p.clone(), { count: 8, tile: 1, color: PHX_CORE, color2: PHX_DEEP, speed: 6, size: 0.3, life: 0.5, gravity: -3, drag: 2 });
+            const g = p.clone(); g.y = gY(c, g.x, g.z);
             c.vfx.decal(g, { kind: 'scorch', radius: 1, life: 6.5, groundY: g.y, color: PHX });
           }
         });
+
+        // --- Beat 3: aftermath — embers drift up off the sweep path ---
+        this.schedule(0.14, () => c.vfx.burst(chestAt().addScaledVector(dir, 2), { count: 10, tile: 1, color: PHX, color2: PHX_CORE, dir, cone: ARC, speed: 3, size: 0.32, life: 1.4, gravity: -3, drag: 1.5 }));
       }
     };
 
