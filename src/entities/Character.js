@@ -280,14 +280,17 @@ export class Character {
       this._phxWings.push(shoulder);
     }
 
-    // ---- tail: long streaming fire ribbons ----
+    // ---- tail: a wide backward-streaming fan (was a downward cluster of
+    // curled planes that stacked into a faceted cone/funnel from below —
+    // removed). 3 flat planes trailing BEHIND on -Z, splayed like a bird's
+    // tail, barely angled down. ----
     this._phxTail = new THREE.Group();
-    this._phxTail.position.set(0, 1.0, -0.55);
+    this._phxTail.position.set(0, 0.95, -0.35);
+    this._phxTail.rotation.x = -0.35;                 // sweep back, nearly horizontal
     g.add(this._phxTail);
-    for (let i = -2; i <= 2; i++) {
-      const fe = plume(2.8 - Math.abs(i) * 0.4, 0.55 - Math.abs(i) * 0.06, 1.5, Math.abs(i) < 1 ? bright : mid);
-      fe.rotation.z = Math.PI - 0.2;
-      fe.rotation.y = i * 0.18;
+    for (let i = -1; i <= 1; i++) {
+      const fe = plume(2.4 - Math.abs(i) * 0.5, 0.5 - Math.abs(i) * 0.08, 0.35, Math.abs(i) < 1 ? bright : mid);
+      fe.rotation.y = Math.PI + i * 0.3;              // point -Z, fan out
       fe.userData.i = i;
       this._phxTail.add(fe);
     }
@@ -721,11 +724,11 @@ export class Character {
       w.rotation.y = s * (-0.18 - Math.max(0, -swing) * 0.14);
     }
 
-    // tail — streams back, sways
-    this._phxTail.rotation.x = (fly ? -0.32 : 0.12) + Math.sin(t * 2.0) * 0.1;
-    this._phxTail.rotation.z = Math.sin(t * 1.5) * 0.12;
+    // tail — a wide fan trailing BEHIND (-Z), nearly horizontal, gentle sway
+    this._phxTail.rotation.x = -0.35 + (fly ? -0.15 : 0) + Math.sin(t * 2.0) * 0.08;
+    this._phxTail.rotation.z = Math.sin(t * 1.5) * 0.1;
     this._phxTail.children.forEach((fe, k) => {
-      fe.rotation.z = (Math.PI - 0.2) + Math.sin(t * 3 + k) * 0.09;
+      fe.rotation.y = Math.PI + fe.userData.i * 0.3 + Math.sin(t * 3 + k) * 0.08;
     });
 
     // aura pulse + slow spin; halo bob

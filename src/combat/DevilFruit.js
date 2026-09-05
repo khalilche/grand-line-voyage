@@ -107,6 +107,8 @@ export class DevilFruit {
 /* ============================ helpers ============================ */
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _up3 = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 function gY(c, x, z) { const g = c.world.sampleGround(x, z); return g.onLand ? g.height : c.world.waterHeight(x, z); }
@@ -3600,13 +3602,20 @@ export class ToriToriPhoenix extends DevilFruit {
             target.x += (Math.random() - 0.5) * 3.5; target.z += (Math.random() - 0.5) * 3.5;
             target.y += (Math.random() - 0.5) * 1.8;
           }
-          // slash VFX (light per-tick — the storm reads through repetition).
-          // `slash` = the pk-particles "lines" streak sprite (white -> tinted);
-          // `phxfire` = the fire pack re-baked to blue flame.
-          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 3.4, life: 0.22, flat: true, yaw: Math.random() * 6.28, color: PHX, color2: PHX_CORE });
-          c.vfx.flipbook(target.clone(), { kind: 'phxfire', size: 2, life: 0.4 });
-          c.vfx.ring(target.clone(), { color: PHX_CORE, radius: 2.5, life: 0.2, vertical: true });
-          c.vfx.burst(target.clone(), { count: 8, tile: 4, color: PHX_CORE, color2: PHX_DEEP, speed: 7, size: 0.3, life: 0.6, gravity: -4, drag: 1.4 });
+          // ONE slash per tick, styled from the reference sheet: a bright
+          // white-cored streak (camera-facing `slash` sprite, rolled to a
+          // random blade angle) + a dimmer blue glow streak behind it +
+          // dark ember shards scattered along it + a few blue spark lines.
+          // No rings, no cones — just the blade + debris.
+          const ang = Math.random() * Math.PI;                 // blade orientation (roll)
+          _up3.set(Math.cos(ang), Math.sin(ang), 0);
+          // blade: blue base -> white tip (ref gradient), over a broad blue glow
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 5.6, life: 0.28, spin: ang, color: PHX_DEEP, color2: PHX });
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 3.4, life: 0.18, spin: ang, color: PHX, color2: PHX_CORE });
+          // dark impact shards flung along the blade (this sells the "cut")
+          c.vfx.burst(target.clone(), { count: 16, tile: 3, color: 0x08080e, color2: 0x1c1c34, dir: _up3, cone: 2.0, speed: 7, size: 0.24, life: 0.5, gravity: 9, drag: 1.0 });
+          // a couple of blue spark trails
+          c.vfx.burst(target.clone(), { count: 4, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.4, speed: 15, size: 0.13, life: 0.26, gravity: 0, drag: 2 });
           c.camera.addShake(0.04);
           const hits = c.combat.areaStrike(target, {
             radius: 2.5, damage: perHit, knockback: 2, up: 0, stun: 0, color: PHX, shake: 0, silent: true,
@@ -3765,13 +3774,14 @@ export class ToriToriPhoenix extends DevilFruit {
     };
   }
 
-  /** Art-level-5 finishing wing-sweep for TORMENTA DE CORTES (Z). Anchored at
-      the chest (phoenix is airborne). ~9 layered VFX beats. */
+  /** Finishing slash for TORMENTA DE CORTES (Z) — reference concept #7 "ráfaga
+      en arco": one big sweeping blade-arc across the front, drawn as a chain
+      of bright slash sprites along the arc + dark debris + blue sparks. No
+      rings, no cones. Anchored at the chest (phoenix is airborne). */
   _aleteoFinale(c, ARC) {
     if (!this.transformed) return;
     const chestAt = () => c.controller.chest.clone();
     const dir = _v2.set(Math.sin(c.controller.facing), 0, Math.cos(c.controller.facing)).clone();
-    const yaw = Math.atan2(-dir.z, dir.x);
     const chest = chestAt();
 
     const hitEnemies = [];
@@ -3781,31 +3791,40 @@ export class ToriToriPhoenix extends DevilFruit {
     });
     if (hits) c.combat.healPlayer(0.25 * 22 * c.combat.playerDamageMult * hits);
 
-    c.vfx.burst(chest.clone(), { count: 18, tile: 4, color: PHX_CORE, color2: PHX, dir: dir.clone().negate(), cone: 1.6, speed: 5, size: 0.3, life: 0.22, gravity: 0, drag: 6 });
-    c.vfx.flipbook(chest.clone(), { kind: 'slash', size: 9, life: 0.26, flat: true, yaw: yaw + Math.PI / 2, color: PHX, color2: PHX_CORE });
-    c.vfx.flipbook(chest.clone().addScaledVector(dir, 2), { kind: 'phxfire', size: 5, life: 0.6 });
-    c.vfx.ring(chest.clone(), { color: PHX_CORE, radius: 5, life: 0.26, thickness: 0.5, vertical: false, arc: { dir, sweep: ARC } });
-    this.schedule(0.03, () => c.vfx.ring(chestAt(), { color: PHX_DEEP, radius: 7, life: 0.55, vertical: false, arc: { dir, sweep: ARC } }));
-    this.schedule(0.02, () => c.vfx.ring(chestAt(), { color: PHX, radius: 4, life: 0.32, vertical: true, arc: { dir, sweep: Math.PI * (120 / 180) } }));
-    c.vfx.burst(chest.clone(), { count: 44, tile: 4, color: PHX_CORE, color2: PHX_DEEP, dir, cone: ARC, speed: 11, size: 0.42, life: 1.2, gravity: -4, drag: 1.0 });
-    c.vfx.burst(chest.clone(), { count: 22, tile: 3, color: PHX_CORE, color2: PHX, dir, cone: ARC, speed: 17, size: 0.2, life: 0.35, gravity: 2, drag: 3 });
+    // draw the arc: 9 slash sprites swept from one side to the other, each a
+    // touch delayed so it reads as a single blade travelling
+    const baseYaw = Math.atan2(dir.x, dir.z);
+    for (let i = 0; i < 9; i++) {
+      const f = i / 8;                                   // 0..1 across the arc
+      const a = baseYaw + (f - 0.5) * ARC;
+      const off = _v3.set(Math.sin(a), 0, Math.cos(a)).multiplyScalar(4.2);
+      off.y = Math.sin(f * Math.PI) * 1.4 - 0.2;         // bow the arc upward
+      this.schedule(i * 0.015, () => {
+        const p = chestAt().add(off);
+        const roll = a - baseYaw + Math.PI / 2;
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 4.5, life: 0.22, spin: roll, color: PHX, color2: PHX_CORE });
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 6.5, life: 0.3, spin: roll, color: PHX_DEEP, color2: PHX });
+        _up3.set(Math.cos(roll), Math.sin(roll), 0);
+        c.vfx.burst(p.clone(), { count: 8, tile: 3, color: 0x0b0b16, color2: 0x1b1b30, dir: _up3, cone: 2.4, speed: 10, size: 0.18, life: 0.45, gravity: 8, drag: 1.1 });
+        c.vfx.burst(p.clone(), { count: 5, tile: 7, color: PHX_CORE, color2: PHX, dir: _up3, cone: 0.6, speed: 16, size: 0.14, life: 0.3, gravity: 0, drag: 2 });
+      });
+    }
     c.camera.addShake(0.5);
     c.combat.hitstop(0.06);
     flash(c, 0.15, PHX);
 
-    this.schedule(0.06, () => {
+    // per-hit accent: a bright slash right on each enemy + dark shards
+    this.schedule(0.08, () => {
       for (const t of hitEnemies) {
         if (!t || (t.dead && !t.isDummy)) continue;
         const p = t.center.clone();
-        c.vfx.flipbook(p.clone(), { kind: 'impact', size: 5, life: 0.32, color: PHX_CORE });
-        c.vfx.flipbook(p.clone(), { kind: 'phxfire', size: 3, life: 0.6 });
-        c.vfx.ring(p.clone(), { color: PHX_CORE, radius: 2.2, life: 0.32, vertical: true });
-        c.vfx.burst(p.clone(), { count: 10, tile: 1, color: PHX_CORE, color2: PHX_DEEP, speed: 7, size: 0.32, life: 0.55, gravity: -3, drag: 2 });
-        const g = p.clone(); g.y = gY(c, g.x, g.z);
-        c.vfx.decal(g, { kind: 'scorch', radius: 1.2, life: 7, groundY: g.y, color: PHX });
+        const roll = Math.random() * Math.PI;
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 3.4, life: 0.2, spin: roll, color: PHX_CORE, color2: PHX });
+        c.vfx.flipbook(p.clone(), { kind: 'impact', size: 3.5, life: 0.28, color: PHX });
+        _up3.set(Math.cos(roll), Math.sin(roll), 0);
+        c.vfx.burst(p.clone(), { count: 9, tile: 3, color: 0x0b0b16, color2: 0x22223a, dir: _up3, cone: 2.6, speed: 8, size: 0.16, life: 0.4, gravity: 8, drag: 1.2 });
       }
     });
-    this.schedule(0.14, () => c.vfx.burst(chestAt().addScaledVector(dir, 2.5), { count: 14, tile: 1, color: PHX, color2: PHX_CORE, dir, cone: ARC, speed: 3, size: 0.34, life: 1.5, gravity: -3, drag: 1.5 }));
   }
 
   /** Abilities are locked until you've turned into the Phoenix. */
