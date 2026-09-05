@@ -3607,15 +3607,23 @@ export class ToriToriPhoenix extends DevilFruit {
             target.z += Math.sin(ang) * rad;
             target.y += (Math.random() - 0.5) * 5;
           }
-          // ONE big blade per tick (ref sheet): a white-cored `slash` streak
-          // rolled to a random angle, over a broad blue glow blade, + dark
-          // impact shards flung along it + a blue spark trail. No rings/cones.
+          // ONE big blade per tick: a `slash` streak rolled to a random
+          // angle. Glow layer = PURE deep-blue -> blue (no white, so stacked
+          // additive overlaps stay blue); core layer = blue body with white
+          // only reaching the cutting edge. + bright angular cut-fragments
+          // (user chose bright over dark: additive particles can't show dark)
+          // + 6 blue spark trails. No rings/cones/flame-plumes/domes.
           const ang = Math.random() * Math.PI;
           _up3.set(Math.cos(ang), Math.sin(ang), 0);
-          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 10 + Math.random() * 4, life: 0.32, spin: ang, color: PHX_DEEP, color2: PHX });
-          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 6.5 + Math.random() * 3, life: 0.22, spin: ang, color: PHX, color2: PHX_CORE });
-          c.vfx.burst(target.clone(), { count: 18, tile: 3, color: 0x07070d, color2: 0x1c1c34, dir: _up3, cone: 1.8, speed: 9, size: 0.28, life: 0.55, gravity: 10, drag: 0.9 });
-          c.vfx.burst(target.clone(), { count: 5, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.35, speed: 20, size: 0.14, life: 0.3, gravity: 0, drag: 1.6 });
+          const bladeSize = 10 + Math.random() * 4;
+          // DOMINANT layer = a solid blue blade (normal blend so stacked
+          // blades over the bright sky stay blue, don't wash white).
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: bladeSize, life: 0.32, spin: ang, color: PHX, color2: PHX_DEEP, additive: false });
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: bladeSize * 0.62, life: 0.24, spin: ang, color: PHX_DEEP, color2: PHX, additive: false });
+          // just a THIN additive white glint down the spine of the blade
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: bladeSize * 0.32, life: 0.16, spin: ang, color: PHX, color2: PHX_CORE });
+          c.vfx.burst(target.clone(), { count: 18, tile: 3, color: PHX_CORE, color2: PHX, dir: _up3, cone: 1.9, speed: 11, size: 0.32, life: 0.42, gravity: 4, drag: 1.2 });
+          c.vfx.burst(target.clone(), { count: 6, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.35, speed: 20, size: 0.14, life: 0.3, gravity: 0, drag: 1.6 });
           c.camera.addShake(0.03);
           const hits = c.combat.areaStrike(target, {
             radius: 2.5, damage: perHit, knockback: 2, up: 0, stun: 0, color: PHX, shake: 0, silent: true,
@@ -3802,11 +3810,11 @@ export class ToriToriPhoenix extends DevilFruit {
       this.schedule(i * 0.014, () => {
         const p = chestAt().add(off);
         const roll = a - baseYaw + Math.PI / 2;
-        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 13, life: 0.32, spin: roll, color: PHX_DEEP, color2: PHX });
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 13, life: 0.32, spin: roll, color: PHX, color2: PHX_DEEP, additive: false });
         c.vfx.flipbook(p.clone(), { kind: 'slash', size: 8, life: 0.24, spin: roll, color: PHX, color2: PHX_CORE });
         _up3.set(Math.cos(roll), Math.sin(roll), 0);
-        c.vfx.burst(p.clone(), { count: 10, tile: 3, color: 0x08080e, color2: 0x1b1b30, dir: _up3, cone: 2.4, speed: 11, size: 0.22, life: 0.5, gravity: 9, drag: 1.0 });
-        c.vfx.burst(p.clone(), { count: 5, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.5, speed: 18, size: 0.15, life: 0.3, gravity: 0, drag: 1.8 });
+        c.vfx.burst(p.clone(), { count: 12, tile: 3, color: PHX_CORE, color2: PHX, dir: _up3, cone: 2.4, speed: 12, size: 0.3, life: 0.44, gravity: 4, drag: 1.1 });
+        c.vfx.burst(p.clone(), { count: 6, tile: 7, color: PHX, color2: PHX_CORE, dir: _up3, cone: 0.5, speed: 18, size: 0.15, life: 0.3, gravity: 0, drag: 1.8 });
       });
     }
     c.camera.addShake(0.5);
@@ -3819,10 +3827,10 @@ export class ToriToriPhoenix extends DevilFruit {
         if (!t || (t.dead && !t.isDummy)) continue;
         const p = t.center.clone();
         const roll = Math.random() * Math.PI;
-        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 3.4, life: 0.2, spin: roll, color: PHX_CORE, color2: PHX });
+        c.vfx.flipbook(p.clone(), { kind: 'slash', size: 4, life: 0.2, spin: roll, color: PHX, color2: PHX_CORE });
         c.vfx.flipbook(p.clone(), { kind: 'impact', size: 3.5, life: 0.28, color: PHX });
         _up3.set(Math.cos(roll), Math.sin(roll), 0);
-        c.vfx.burst(p.clone(), { count: 9, tile: 3, color: 0x0b0b16, color2: 0x22223a, dir: _up3, cone: 2.6, speed: 8, size: 0.16, life: 0.4, gravity: 8, drag: 1.2 });
+        c.vfx.burst(p.clone(), { count: 12, tile: 3, color: PHX_CORE, color2: PHX, dir: _up3, cone: 2.6, speed: 10, size: 0.3, life: 0.4, gravity: 4, drag: 1.2 });
       }
     });
   }
