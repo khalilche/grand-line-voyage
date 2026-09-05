@@ -3568,7 +3568,9 @@ export class ToriToriPhoenix extends DevilFruit {
     this.slots.f = { name: 'Fénix', transform: true };
 
     // === Z — PICOTAZO ARDIENTE: a fast 3-hit blue-talon dive combo. Each hit
-    // heals you for 35% of the damage dealt (the blue flame restores). ===
+    // heals 35% of the damage dealt; the FINAL peck brands foes with an ember
+    // that keeps feeding you life (and burning them) for 2 s — a sustained
+    // lifesteal hook, not just a burst. ===
     this.slots.q = {
       name: 'Picotazo Ardiente', cd: 1.8, _t: 0,
       cast: (c) => {
@@ -3581,12 +3583,32 @@ export class ToriToriPhoenix extends DevilFruit {
           c.controller.velocity.addScaledVector(dir, 22); c.controller.velocity.y += 2;
           c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 0.2);
           const hp = c.controller.chest.clone().addScaledVector(dir, 2.2);
-          const dmg = n === 2 ? 26 : 15;
+          const last = n === 2;
+          const dmg = last ? 26 : 15;
           c.vfx.flame(hp.clone(), { radius: 0.8, height: 2, life: 0.35, color: PHX, core: PHX_CORE });
           c.vfx.flipbook(hp.clone(), { kind: 'muzzle', size: 2.6, life: 0.14, color: PHX_CORE });
-          const hits = c.combat.areaStrike(hp, { radius: 2.6, damage: dmg, knockback: n === 2 ? 20 : 8, up: n === 2 ? 8 : 3, stun: 0.2, color: PHX, shake: 0.1 });
+          const branded = [];
+          const hits = c.combat.areaStrike(hp, {
+            radius: 2.6, damage: dmg, knockback: last ? 20 : 8, up: last ? 8 : 3, stun: 0.2, color: PHX, shake: 0.1,
+            onHitTarget: (t) => { if (last) branded.push(t); }
+          });
           if (hits) c.combat.healPlayer(dmg * 0.35 * hits);
           c.vfx.burst(hp.clone(), { count: 12, color: PHX_CORE, color2: PHX, tile: 1, speed: 10, size: 0.26, life: 0.3, gravity: 2, drag: 3, dir, cone: 0.6 });
+          if (last && branded.length) {
+            let bt = 0;
+            const brandTick = () => {
+              let alive = false;
+              for (const t of branded) {
+                if (t.dead) continue;
+                alive = true;
+                t.takeHit({ damage: 4, dir: null, knockback: 0, up: 0, stun: 0 });
+                c.vfx.flipbook(t.center.clone(), { kind: 'fire', size: 1.6, life: 0.3, color: PHX, rise: 1 });
+                c.combat.healPlayer(6);
+              }
+              if (alive && ++bt < 4) this.schedule(0.5, brandTick);
+            };
+            this.schedule(0.5, brandTick);
+          }
           if (++n < 3) this.schedule(0.09, peck);
         };
         peck();
@@ -3630,7 +3652,13 @@ export class ToriToriPhoenix extends DevilFruit {
           kind: 'fire', radius: 8, duration: 4, groundY: gp.y,
           onTick: (ctr, r) => {
             for (const t of c.combat.enemiesInRadius(ctr, r)) t.takeHit({ damage: 6, dir: null, knockback: 0, up: 0, stun: 0 });
-            if (c.controller.position.distanceTo(ctr) < r + 1) c.combat.healPlayer(8);
+            if (c.controller.position.distanceTo(ctr) < r + 1) {
+              c.combat.healPlayer(8);
+              // the restoration fire RE-ARMS your once-per-form phoenix revive —
+              // stand in it after a near-death and you can rise again
+              this._revivedThisForm = false;
+              c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 0.35);
+            }
           },
           onEmit: (ep) => c.vfx.burst(ep, { count: 3, color: PHX_CORE, color2: PHX, tile: 1, speed: 3, size: 0.34, life: 0.7, gravity: -3, drag: 2, dir: _up, cone: 0.6 })
         });
@@ -3638,7 +3666,9 @@ export class ToriToriPhoenix extends DevilFruit {
     };
 
     // === V — COMETA AZUL: rocket up, then streak DOWN as a comet of blue fire
-    // to the cursor — colossal impact, and you emerge fully healed. ===
+    // to EXACTLY where you're aiming (up to 60 m) — colossal impact, you emerge
+    // fully healed, and it leaves a 3 s blue-flame updraft that juggles foes
+    // and rockets you skyward again if you fly back into it. ===
     this.slots.v = {
       name: 'Cometa Azul', cd: 6, _t: 0,
       cast: (c) => {
@@ -3646,7 +3676,7 @@ export class ToriToriPhoenix extends DevilFruit {
         c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 1.1);
         c.controller.velocity.set(0, 20, 0);
         c.vfx.burst(c.controller.chest, { count: 24, color: PHX_CORE, color2: PHX, tile: 1, speed: 10, size: 0.3, life: 0.5, gravity: -3, drag: 2, dir: _up, cone: 1.1 });
-        const tp = ahead(c, 11); tp.y = gY(c, tp.x, tp.z);
+        const tp = aimedGround(c, 60, 6);
         this.schedule(0.26, () => {
           const from = c.controller.chest.clone();
           const dv = tp.clone().add(_up).sub(from).normalize();
@@ -3675,6 +3705,17 @@ export class ToriToriPhoenix extends DevilFruit {
             }
           });
           c.vfx.burst(gp.clone(), { count: 70, color: PHX_CORE, color2: 0xffffff, tile: 1, speed: 20, size: 0.4, life: 0.9, gravity: 4, drag: 1.5, dir: _up, cone: 2.4 });
+          // ---- lingering blue-flame updraft column ----
+          c.vfx.hazard(gp.clone(), {
+            kind: 'fire', radius: 4, duration: 3, groundY: gp.y,
+            onTick: (ctr, r) => {
+              for (const t of c.combat.enemiesInRadius(ctr, r)) t.takeHit({ damage: 5, dir: _up, knockback: 2, up: 9, stun: 0 });
+              if (c.controller.position.distanceTo(ctr) < r + 1.5 && c.controller.flying) {
+                c.controller.velocity.y = Math.max(c.controller.velocity.y, 17);
+              }
+            },
+            onEmit: (ep) => c.vfx.burst(ep, { count: 3, color: PHX_CORE, color2: PHX, tile: 1, speed: 6, size: 0.3, life: 0.6, gravity: -6, drag: 1.6, dir: _up, cone: 0.4 })
+          });
         });
       }
     };
@@ -3690,6 +3731,8 @@ export class ToriToriPhoenix extends DevilFruit {
         const R = 22;
         c.combat.healPlayer(9999);
         this._immortalT = 4.0;
+        this._absorbed = 0;
+        this._lastHp = c.combat.playerHp;
         c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 1.4);
         c.controller.velocity.y = 16;
         slow(c, 0.4, 0.4); flash(c, 0.6, 0xdff2ff); c.combat.hitstop(0.14); c.camera.addShake(1.6);
@@ -3719,9 +3762,11 @@ export class ToriToriPhoenix extends DevilFruit {
           for (const t of c.combat.enemiesInRadius(gp, R)) t.takeHit({ damage: 5, dir: null, knockback: 0, up: 0, stun: 0 });
           if (ft < 4.0) this.schedule(0.18, feathers);
           else {
-            c.combat.hitstop(0.1); c.camera.addShake(1.0); flash(c, 0.3, 0xdff2ff);
-            c.vfx.flipbook(gp.clone().add(_up), { kind: 'impact', size: 28, life: 0.5, color: 0xffffff });
-            c.combat.areaStrike(gp, { radius: R, damage: 60, knockback: 30, up: 12, stun: 0.7, color: PHX, shake: 0.7 });
+            // the closing wing-slam scales with punishment absorbed during the window
+            const slam = 60 + (this._absorbed || 0) * 25;
+            c.combat.hitstop(0.1); c.camera.addShake(1.0 + Math.min(1, (this._absorbed || 0) * 0.15)); flash(c, 0.3, 0xdff2ff);
+            c.vfx.flipbook(gp.clone().add(_up), { kind: 'impact', size: 28 + Math.min(20, (this._absorbed || 0) * 4), life: 0.5, color: 0xffffff });
+            c.combat.areaStrike(gp, { radius: R, damage: slam, knockback: 30, up: 12, stun: 0.7, color: PHX, shake: 0.7 });
           }
         };
         this.schedule(0.4, feathers);
@@ -3756,11 +3801,27 @@ export class ToriToriPhoenix extends DevilFruit {
     }
     if (this._immortalT > 0) {
       this._immortalT -= dt;
+      // a real HP drop this frame = a hit got through the window: soak it,
+      // convert it to a healing pulse, and lash back at the nearest attacker
+      // (being focused only feeds the phoenix — and swells the closing slam)
+      if (this._lastHp != null && c.combat.playerHp < this._lastHp - 0.5) {
+        this._absorbed = (this._absorbed || 0) + 1;
+        c.combat.healPlayer(14);
+        c.camera.addShake(0.25);
+        c.vfx.flipbook(c.controller.chest.clone(), { kind: 'muzzle', size: 3, life: 0.16, color: PHX_CORE });
+        const foe = c.combat.nearestEnemies(c.controller.position, 1, 14)[0];
+        if (foe && !foe.dead) {
+          foe.takeHit({ damage: 22, dir: foe.center.clone().sub(c.controller.position).setY(0.2).normalize(), knockback: 14, up: 5, stun: 0.3 });
+          c.vfx.ribbon(c.controller.chest.clone(), foe.center.clone(), { color: PHX_CORE, life: 0.22 });
+          c.vfx.flame(foe.center.clone(), { radius: 1, height: 3, life: 0.4, color: PHX, core: 0xffffff });
+        }
+      }
       if (c.combat.playerHp < 1) {
         c.combat.playerHp = 1;
         c.combat.hooks?.onPlayerHp?.(1 / c.combat.playerMaxHp);
         c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 0.12);
       }
+      this._lastHp = c.combat.playerHp;
     } else if (!this._revivedThisForm && c.combat.playerHp <= 0) {
       this._revivedThisForm = true;
       c.combat.playerHp = Math.round(c.combat.playerMaxHp * 0.6);
@@ -3782,16 +3843,66 @@ export class ToriToriPhoenix extends DevilFruit {
     if (on) {
       this._ctx = c;
       this._revivedThisForm = false;
-      c.controller.velocity.y = Math.max(c.controller.velocity.y, 7);
-      c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 0.5);
-      c.vfx.burst(c.controller.chest, { count: 26, color: PHX_CORE, color2: 0xffffff, speed: 10, size: 0.3, life: 0.7, gravity: -2, drag: 2.4 });
-      c.vfx.flame(c.controller.chest.clone(), { radius: 2.4, height: 6, life: 0.7, color: PHX, core: PHX_CORE });
-      c.vfx.ring(c.controller.chest, { color: PHX_CORE, radius: 3.6, life: 0.4, vertical: true });
-      flash(c, 0.14, 0xdff2ff);
-      c.camera.addShake(0.2);
+      this._absorbed = 0;                 // hits soaked during T's immortal window
+      c.combat.playerIFrames = Math.max(c.combat.playerIFrames, 1.1);
+
+      const chest = () => c.controller.chest.clone();
+      const gp = () => { const p = c.controller.position.clone(); p.y = gY(c, p.x, p.z); return p; };
+
+      // ---- ONE long sweeping cinematic across the whole rebirth: pull back
+      // and orbit while craning UP to follow the phoenix rising out of the
+      // ash. ~3.3s total, gentle slow-mo so it reads. ----
+      slow(c, 1.9, 0.55);
+      c.camera.cine({
+        dist: 10, fov: 72,
+        focus: chest().add(_up.clone().multiplyScalar(1.4)), focusMix: 0.8,
+        spin: 1.7, pitchAdd: 0.32,
+        inT: 0.28, holdT: 1.9, outT: 1.15
+      });
+
+      // ---- Phase 0: DEATH — the body goes to ash, a held breath ----
+      flash(c, 0.14, 0x0a1a2a); c.camera.addShake(0.25);
+      c.vfx.burst(chest(), { count: 34, color: 0x22303a, color2: 0x101820, tile: 2, speed: 3, size: 0.55, life: 1.1, gravity: 7, drag: 1.3, dir: _up, cone: 2.7 });
+      c.vfx.ring(chest(), { color: 0x1663d6, radius: 5, life: 0.28, vertical: false });   // implosion inward
+
+      // ---- Phase 1: IGNITION — pillar of blue fire erupts, wings unfurl ----
+      this.schedule(0.32, () => {
+        c.character?.phoenixAwaken();
+        c.controller.velocity.y = Math.max(c.controller.velocity.y, 10);
+        flash(c, 0.16, 0xbfe0ff); c.camera.addShake(1.0); c.combat.hitstop(0.05);
+        c.vfx.flame(gp(), { radius: 3.4, height: 22, life: 1.5, color: PHX, core: 0xffffff });
+        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(4)), { kind: 'impact', size: 18, life: 0.5, color: 0xdff2ff });
+        c.vfx.flipbook(gp().add(_up.clone().multiplyScalar(9)), { kind: 'fire', size: 24, life: 1.6, color: PHX, rise: 3.4 });
+        c.vfx.decal(gp(), { kind: 'scorch', radius: 5.5, life: 9, groundY: gp().y });
+        c.vfx.burst(chest(), { count: 44, color: PHX_CORE, color2: 0xffffff, tile: 4, speed: 13, size: 0.34, life: 1.0, gravity: -3, drag: 1.7, dir: _up, cone: 1.3 });
+      });
+
+      // ---- Phase 2: WINGS OPEN — a rebirth shockwave rolls out ----
+      this.schedule(0.62, () => {
+        c.camera.addShake(0.8); flash(c, 0.12, 0xeaf6ff);
+        c.vfx.dome(gp().add(_up), { radius: 12, life: 0.8, color: PHX_CORE });
+        for (let w = 0; w < 4; w++) this.schedule(w * 0.05, () => {
+          const rr = (w + 1) / 4 * 13;
+          c.vfx.ring(gp(), { color: w % 2 ? PHX_CORE : PHX, radius: rr, life: 0.5 });
+        });
+        c.vfx.burst(gp().add(_up), { count: 52, color: PHX_CORE, color2: PHX, tile: 4, speed: 17, size: 0.42, life: 1.2, gravity: 2, drag: 1.3, dir: _up, cone: 2.7 });
+        // a push, not an attack — stagger nearby foes as the wings snap open
+        for (const t of c.combat.enemiesInRadius(gp(), 10)) {
+          const away = t.center.clone().sub(c.controller.position).setY(0.25).normalize();
+          t.takeHit({ damage: 8, dir: away, knockback: 16, up: 6, stun: 0.6 });
+        }
+      });
+
+      // ---- Phase 3: SETTLE — halo converges, sustained aura, buoyant hover ----
+      this.schedule(1.0, () => {
+        c.controller.velocity.y = Math.max(c.controller.velocity.y, 6);
+        c.vfx.ring(chest(), { color: 0xdff2ff, radius: 3, life: 0.7, vertical: false });
+        c.vfx.flame(chest(), { radius: 1.9, height: 4.5, life: 0.9, color: PHX, core: PHX_CORE });
+      });
     } else {
       this._immortalT = 0;
       c.vfx.burst(c.controller.chest, { count: 16, color: PHX_CORE, speed: 5, size: 0.24, life: 0.4, gravity: 6, drag: 3 });
+      c.vfx.ring(c.controller.chest, { color: PHX, radius: 2.2, life: 0.3, vertical: true });
     }
   }
 }
