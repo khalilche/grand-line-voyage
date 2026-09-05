@@ -3600,11 +3600,13 @@ export class ToriToriPhoenix extends DevilFruit {
             target.x += (Math.random() - 0.5) * 3.5; target.z += (Math.random() - 0.5) * 3.5;
             target.y += (Math.random() - 0.5) * 1.8;
           }
-          // slash VFX (light per-tick — the storm reads through repetition)
-          c.vfx.flipbook(target.clone(), { kind: 'shock', size: 3, life: 0.2, flat: true, yaw: Math.random() * 6.28, color: PHX, color2: PHX_CORE });
+          // slash VFX (light per-tick — the storm reads through repetition).
+          // `slash` = the pk-particles "lines" streak sprite (white -> tinted);
+          // `phxfire` = the fire pack re-baked to blue flame.
+          c.vfx.flipbook(target.clone(), { kind: 'slash', size: 3.4, life: 0.22, flat: true, yaw: Math.random() * 6.28, color: PHX, color2: PHX_CORE });
+          c.vfx.flipbook(target.clone(), { kind: 'phxfire', size: 2, life: 0.4 });
           c.vfx.ring(target.clone(), { color: PHX_CORE, radius: 2.5, life: 0.2, vertical: true });
           c.vfx.burst(target.clone(), { count: 8, tile: 4, color: PHX_CORE, color2: PHX_DEEP, speed: 7, size: 0.3, life: 0.6, gravity: -4, drag: 1.4 });
-          c.vfx.flame(target.clone(), { radius: 0.5, height: 1.5, life: 0.3, color: PHX, core: PHX_CORE });
           c.camera.addShake(0.04);
           const hits = c.combat.areaStrike(target, {
             radius: 2.5, damage: perHit, knockback: 2, up: 0, stun: 0, color: PHX, shake: 0, silent: true,
@@ -3780,7 +3782,8 @@ export class ToriToriPhoenix extends DevilFruit {
     if (hits) c.combat.healPlayer(0.25 * 22 * c.combat.playerDamageMult * hits);
 
     c.vfx.burst(chest.clone(), { count: 18, tile: 4, color: PHX_CORE, color2: PHX, dir: dir.clone().negate(), cone: 1.6, speed: 5, size: 0.3, life: 0.22, gravity: 0, drag: 6 });
-    c.vfx.flipbook(chest.clone(), { kind: 'shock', size: 8, life: 0.24, flat: true, yaw, color: PHX, color2: PHX_CORE });
+    c.vfx.flipbook(chest.clone(), { kind: 'slash', size: 9, life: 0.26, flat: true, yaw: yaw + Math.PI / 2, color: PHX, color2: PHX_CORE });
+    c.vfx.flipbook(chest.clone().addScaledVector(dir, 2), { kind: 'phxfire', size: 5, life: 0.6 });
     c.vfx.ring(chest.clone(), { color: PHX_CORE, radius: 5, life: 0.26, thickness: 0.5, vertical: false, arc: { dir, sweep: ARC } });
     this.schedule(0.03, () => c.vfx.ring(chestAt(), { color: PHX_DEEP, radius: 7, life: 0.55, vertical: false, arc: { dir, sweep: ARC } }));
     this.schedule(0.02, () => c.vfx.ring(chestAt(), { color: PHX, radius: 4, life: 0.32, vertical: true, arc: { dir, sweep: Math.PI * (120 / 180) } }));
@@ -3795,7 +3798,7 @@ export class ToriToriPhoenix extends DevilFruit {
         if (!t || (t.dead && !t.isDummy)) continue;
         const p = t.center.clone();
         c.vfx.flipbook(p.clone(), { kind: 'impact', size: 5, life: 0.32, color: PHX_CORE });
-        c.vfx.flame(p.clone(), { radius: 0.7, height: 1.6, life: 0.55, color: PHX, core: PHX_CORE });
+        c.vfx.flipbook(p.clone(), { kind: 'phxfire', size: 3, life: 0.6 });
         c.vfx.ring(p.clone(), { color: PHX_CORE, radius: 2.2, life: 0.32, vertical: true });
         c.vfx.burst(p.clone(), { count: 10, tile: 1, color: PHX_CORE, color2: PHX_DEEP, speed: 7, size: 0.32, life: 0.55, gravity: -3, drag: 2 });
         const g = p.clone(); g.y = gY(c, g.x, g.z);

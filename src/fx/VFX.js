@@ -15,6 +15,13 @@ const FX_ATLAS = {
   energyball: { cols: 5, rows: 2, frames: 10 },
   magic:      { cols: 5, rows: 4, frames: 20 },
   shock:      { cols: 6, rows: 4, frames: 24 },
+  // phoenix sets (tools/build-flipbooks.mjs): slash/flare are white streak
+  // sprites; phx* are the warm packs re-baked to blue flame.
+  slash:      { cols: 5, rows: 2, frames: 10 },
+  flare:      { cols: 6, rows: 4, frames: 24 },
+  phxfire:    { cols: 8, rows: 4, frames: 32 },
+  phxball:    { cols: 5, rows: 2, frames: 10 },
+  phxmuzzle:  { cols: 5, rows: 4, frames: 20 },
 };
 
 /**
