@@ -1,0 +1,37 @@
+{
+  "impact": {
+    "cols": 5,
+    "rows": 4,
+    "frames": 20
+  },
+  "muzzle": {
+    "cols": 5,
+    "rows": 4,
+    "frames": 20
+  },
+  "fire": {
+    "cols": 8,
+    "rows": 4,
+    "frames": 32
+  },
+  "smoke": {
+    "cols": 8,
+    "rows": 5,
+    "frames": 40
+  },
+  "energyball": {
+    "cols": 5,
+    "rows": 2,
+    "frames": 10
+  },
+  "magic": {
+    "cols": 5,
+    "rows": 4,
+    "frames": 20
+  },
+  "shock": {
+    "cols": 6,
+    "rows": 4,
+    "frames": 24
+  }
+}

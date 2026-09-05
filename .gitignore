@@ -1,0 +1,12 @@
+node_modules/
+server/node_modules/
+dist/
+.env
+*.log
+
+# Heavy raw authoring material — kept locally, not needed to build or run the
+# game (nothing in src/ imports from here). Excluded so the repo stays small
+# enough to clone/deploy fast and under GitHub's file-size limits.
+tools/pk-particles/
+tools/models-src/
+tools/shots/

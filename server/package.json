@@ -1,0 +1,14 @@
+{
+  "name": "grand-line-mp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebSocket relay server for Grand Line Voyage multiplayer (same-world + PvP).",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

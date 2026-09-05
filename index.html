@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Grand Line Voyage</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; }
+      body {
+        font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+        color: #eaf2ff;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+      /* ---------- Loading screen ---------- */
+      #loader {
+        position: fixed; inset: 0; z-index: 50;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 26px;
+        background:
+          radial-gradient(1200px 800px at 50% 20%, #12305c 0%, #0a1830 45%, #05070d 100%);
+        transition: opacity 0.8s ease;
+      }
+      #loader.hidden { opacity: 0; pointer-events: none; }
+      #loader .title {
+        font-size: clamp(28px, 6vw, 64px);
+        letter-spacing: 0.14em;
+        font-weight: 800;
+        text-transform: uppercase;
+        text-shadow: 0 0 24px rgba(96, 165, 255, 0.55), 0 4px 0 rgba(0,0,0,0.35);
+        background: linear-gradient(180deg, #ffffff, #9dc4ff);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      #loader .subtitle { opacity: 0.7; letter-spacing: 0.35em; font-size: 12px; text-transform: uppercase; }
+      #bar-wrap { width: min(420px, 70vw); height: 6px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+      #bar { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #4f9dff, #8be9ff); transition: width 0.25s ease; }
+      #loader .hint { font-size: 12px; opacity: 0.55; margin-top: 4px; }
+
+      /* ---------- HUD ---------- */
+      #hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+      #hud .panel {
+        position: absolute;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      }
+      #vitals { left: 26px; bottom: 24px; width: 320px; display: flex; flex-direction: column; gap: 8px; }
+      .meter { height: 16px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.14); overflow: hidden; position: relative; }
+      .meter > span { position: absolute; inset: 0; transform-origin: left center; transition: transform 0.18s ease; }
+      .meter.hp > span { background: linear-gradient(90deg, #ff5c6c, #ff9aa4); }
+      .meter.stam > span { background: linear-gradient(90deg, #ffd23f, #fff1b8); }
+      .meter .label { position: absolute; left: 8px; top: -1px; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.85; }
+
+      #fruit { right: 26px; bottom: 24px; display: flex; gap: 12px; }
+      #fruit-name {
+        right: 26px; bottom: 96px; text-align: right;
+        font-size: 15px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      }
+      #fruit-name .rar { display:block; font-weight:700; font-size:10px; letter-spacing:0.24em; }
+      #fruit-name .pas { display:block; font-weight:600; font-size:10px; letter-spacing:0.06em; opacity:0.5; text-transform:none; margin-top:2px; }
+      #fruit-name .xform {
+        display:none; margin-top:4px; font-size:11px; font-weight:800; letter-spacing:0.2em;
+        color:#fff; padding:2px 8px; border-radius:6px; background:rgba(255,255,255,0.12);
+      }
+      #fruit-name.transformed .xform { display:inline-block; }
+      .skill.ult { border-color: rgba(255,210,80,0.55); box-shadow: 0 0 12px rgba(255,200,80,0.25) inset; }
+      .skill.ult.locked { opacity: 0.28; }
+      .skill {
+        width: 62px; height: 62px; border-radius: 12px;
+        background: rgba(8, 16, 32, 0.6); border: 1px solid rgba(255,255,255,0.16);
+        display: flex; align-items: center; justify-content: center; flex-direction: column;
+        position: relative; overflow: hidden;
+        backdrop-filter: blur(4px);
+      }
+      .skill .key { font-size: 11px; opacity: 0.7; }
+      .skill .name { font-size: 10px; opacity: 0.85; letter-spacing: 0.06em; }
+      .skill .cd { position: absolute; left: 0; bottom: 0; width: 100%; background: rgba(0,0,0,0.62); height: 0%; transition: height 0.1s linear; }
+
+      #thor-charges {
+        position: absolute; right: 26px; bottom: 96px;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+        padding: 7px 10px; border-radius: 10px;
+        background: rgba(8, 16, 32, 0.55); border: 1px solid rgba(159,220,255,0.35);
+        box-shadow: 0 0 14px rgba(120,200,255,0.25) inset;
+      }
+      #thor-charges .pips { display: flex; gap: 5px; }
+      #thor-charges .pips i {
+        width: 12px; height: 18px; display: block;
+        background: rgba(159,220,255,0.18); border: 1px solid rgba(159,220,255,0.4);
+        clip-path: polygon(60% 0, 15% 55%, 45% 55%, 40% 100%, 90% 40%, 55% 40%);
+        transition: background 0.12s ease;
+      }
+      #thor-charges .pips i.on { background: #bfe8ff; box-shadow: 0 0 8px #7fd0ff; }
+      #thor-charges .bar { width: 74px; height: 3px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+      #thor-charges .bar > span { display: block; height: 100%; width: 100%; background: linear-gradient(90deg,#7fd0ff,#dff4ff); }
+
+      #haki {
+        position: absolute; right: 26px; bottom: 168px;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+        padding: 7px 10px; border-radius: 10px;
+        background: rgba(8, 16, 32, 0.55); border: 1px solid rgba(180,160,255,0.3);
+        box-shadow: 0 0 14px rgba(150,100,255,0.2) inset;
+      }
+      #haki .icos { display: flex; gap: 6px; }
+      #haki .ico {
+        width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+        background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.18); opacity: 0.55;
+        transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      }
+      #haki .ico.armament.on { opacity: 1; background: rgba(20,20,26,0.9); box-shadow: 0 0 10px rgba(0,0,0,0.8); border-color: #444; }
+      #haki .ico.observation.on { opacity: 1; background: rgba(120,190,255,0.35); box-shadow: 0 0 10px #7fc4ff; border-color: #bfe4ff; }
+      #haki .ico.haoshoku { position: relative; overflow: hidden; }
+      #haki .ico.haoshoku.ready { opacity: 1; background: rgba(150,60,220,0.4); box-shadow: 0 0 12px #b060ff; border-color: #d6aaff; }
+      #haki .ico.haoshoku .cd {
+        position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6);
+        height: var(--cd, 0%); transition: height 0.1s linear; pointer-events: none;
+      }
+      #haki .ico.locked { opacity: 0.22; filter: grayscale(1); }
+      #haki .bar { width: 92px; height: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+      #haki .bar > span { display: block; height: 100%; width: 100%; background: linear-gradient(90deg,#b060ff,#dff4ff); transition: width 0.1s linear; }
+      #haki.empty .bar > span { background: linear-gradient(90deg,#5a2a80,#7a3aa0); }
+
+      #reticle {
+        position: absolute; left: 50%; top: 50%; width: 8px; height: 8px;
+        margin: -4px 0 0 -4px; border-radius: 50%;
+        background: rgba(255,255,255,0.85); box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+        opacity: 0; transition: opacity 0.15s ease;
+      }
+      #reticle.aim { opacity: 1; }
+
+      #compass {
+        left: 50%; top: 18px; transform: translateX(-50%);
+        font-size: 13px; letter-spacing: 0.5em; opacity: 0.8;
+        padding: 6px 18px; border-radius: 999px;
+        background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.1);
+      }
+
+      #mode-tag {
+        right: 26px; top: 18px; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+        opacity: 0.7; padding: 6px 12px; border-radius: 8px; background: rgba(0,0,0,0.28);
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+
+      #controls-hint {
+        left: 50%; bottom: 16px; transform: translateX(-50%);
+        font-size: 11px; opacity: 0.42; letter-spacing: 0.08em; text-align: center; line-height: 1.7;
+      }
+
+      #perf {
+        left: 26px; top: 18px; font-size: 11px; opacity: 0.5;
+        font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      }
+
+      /* level + xp */
+      #levelbar { left: 26px; bottom: 92px; width: 320px; }
+      #levelbar .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+      #levelbar .lv { font-size: 15px; font-weight: 800; letter-spacing: 0.08em; }
+      #levelbar .pct { font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; }
+      #xpmeter { height: 10px; border-radius: 5px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.16); overflow: hidden; }
+      #xpmeter > span { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #ffd23f, #fff1b8); transition: width 0.35s cubic-bezier(.2,.7,.2,1); }
+      #levelup {
+        left: 50%; top: 40%; transform: translate(-50%,-50%) scale(0.6); opacity: 0;
+        font-size: 40px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+        color: #fff2b0; text-shadow: 0 0 24px rgba(255,210,80,0.7), 0 4px 0 rgba(0,0,0,0.35);
+        transition: opacity 0.3s ease, transform 0.4s cubic-bezier(.2,1.5,.4,1);
+      }
+      #levelup.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+
+      /* interaction prompt */
+      #interact {
+        left: 50%; bottom: 128px; transform: translateX(-50%);
+        font-size: 13px; letter-spacing: 0.04em; padding: 8px 16px; border-radius: 10px;
+        background: rgba(6,12,24,0.66); border: 1px solid rgba(255,255,255,0.18);
+        opacity: 0; transition: opacity 0.15s ease;
+      }
+      #interact.show { opacity: 1; }
+      #interact b { color: #ffd23f; }
+
+      /* dialogue */
+      #dialogue {
+        left: 50%; bottom: 44px; transform: translateX(-50%);
+        width: min(620px, 80vw); padding: 16px 20px; border-radius: 14px;
+        background: rgba(6,12,24,0.82); border: 1px solid rgba(255,255,255,0.16);
+        box-shadow: 0 16px 48px rgba(0,0,0,0.5); display: none;
+      }
+      #dialogue .who { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: #7fc4ff; margin-bottom: 6px; }
+      #dialogue .say { font-size: 15px; line-height: 1.5; }
+      #dialogue .next { font-size: 11px; opacity: 0.55; margin-top: 10px; text-align: right; }
+
+      /* boss bar */
+      #bossbar {
+        left: 50%; top: 54px; transform: translateX(-50%); width: min(560px, 74vw);
+        display: none; text-align: center;
+      }
+      #bossbar .bname { font-size: 14px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; text-shadow: 0 2px 8px #000a; margin-bottom: 5px; }
+      #bossbar .track { height: 14px; border-radius: 7px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,120,120,0.5); overflow: hidden; }
+      #bossbar .track > span { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff4d5e, #ff9aa4); transition: width 0.2s ease; }
+
+      /* island banner */
+      #island-banner {
+        left: 50%; top: 96px; transform: translateX(-50%) translateY(-8px);
+        text-align: center; opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease;
+      }
+      #island-banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      #island-banner .n { font-size: 22px; font-weight: 800; letter-spacing: 0.16em; text-shadow: 0 2px 12px #000b; }
+      #island-banner .lv { font-size: 12px; letter-spacing: 0.22em; color: #ffd98a; margin-top: 3px; }
+
+      /* ---------- multiplayer status / region + latency ---------- */
+      #net-badge {
+        position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 40;
+        padding: 5px 12px; border-radius: 999px; font-size: 12px; letter-spacing: 0.08em;
+        background: rgba(8, 20, 40, 0.7); border: 1px solid rgba(120,170,255,0.28); color: #cfe0ff;
+        pointer-events: none;
+      }
+      .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+      .dot.good { background: #57e08a; box-shadow: 0 0 6px #57e08a88; }
+      .dot.ok   { background: #e6c14a; box-shadow: 0 0 6px #e6c14a88; }
+      .dot.bad  { background: #e0575f; box-shadow: 0 0 6px #e0575f88; }
+      #ping-hud {
+        position: fixed; top: 10px; right: 12px; z-index: 40; padding: 4px 10px; border-radius: 999px;
+        font-size: 11px; letter-spacing: 0.05em; font-variant-numeric: tabular-nums;
+        background: rgba(8, 20, 40, 0.7); border: 1px solid rgba(120,170,255,0.28); color: #cfe0ff; pointer-events: none;
+      }
+      #ping-hud.good { border-color: #57e08a55; color: #b9f5cd; }
+      #ping-hud.ok   { border-color: #e6c14a55; color: #ffe9ad; }
+      #ping-hud.bad  { border-color: #e0575f55; color: #ffc4c7; }
+      #region-picker {
+        position: fixed; top: 34px; right: 12px; z-index: 40; font-size: 11px; letter-spacing: 0.05em;
+        background: rgba(8, 20, 40, 0.7); border: 1px solid rgba(120,170,255,0.28); border-radius: 10px;
+        color: #cfe0ff; cursor: pointer; user-select: none; overflow: hidden;
+      }
+      #region-picker .rp-current { padding: 5px 10px; white-space: nowrap; }
+      #region-picker .rp-list { display: none; border-top: 1px solid rgba(120,170,255,0.2); }
+      #region-picker.open .rp-list { display: block; }
+      #region-picker .rp-opt { padding: 6px 10px; white-space: nowrap; }
+      #region-picker .rp-opt:hover { background: rgba(120,170,255,0.14); }
+      #region-picker .rp-opt.active { color: #9fe0ff; }
+      #region-picker .rp-hint { padding: 5px 10px 6px; font-size: 9px; opacity: 0.55; white-space: normal; max-width: 170px; }
+      #mm-prompt {
+        position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 45;
+        padding: 12px 16px; border-radius: 10px; max-width: min(360px, 88vw);
+        background: linear-gradient(180deg, #10203a, #0a1526); border: 1px solid rgba(120,170,255,0.3);
+        color: #eaf2ff; font-size: 12px; box-shadow: 0 12px 30px #0008;
+      }
+      #mm-prompt .row { display: flex; gap: 8px; margin-top: 8px; }
+      #mm-prompt button {
+        flex: 1; padding: 7px; border-radius: 7px; border: 0; cursor: pointer;
+        font-weight: 700; letter-spacing: 0.04em; font-size: 11px; background: #3f8bff; color: #fff;
+      }
+      #mm-prompt button#mm-stay { background: rgba(255,255,255,0.1); color: #cdd9ea; }
+      #join-toasts {
+        position: fixed; top: 60px; right: 12px; z-index: 44; display: flex; flex-direction: column; gap: 6px;
+        pointer-events: none;
+      }
+      .join-toast {
+        pointer-events: auto; padding: 7px 10px; border-radius: 9px; font-size: 11.5px; max-width: 240px;
+        background: rgba(10, 22, 42, 0.88); border: 1px solid rgba(120,170,255,0.3); color: #eaf2ff;
+        display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 22px #0007;
+        animation: joinIn 0.25s ease-out;
+      }
+      .join-toast button {
+        padding: 4px 8px; border-radius: 6px; border: 0; cursor: pointer; font-size: 10.5px;
+        font-weight: 700; background: #3f8bff; color: #fff; white-space: nowrap;
+      }
+      @keyframes joinIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="loader">
+      <div class="title">Grand Line Voyage</div>
+      <div class="subtitle">Set Sail</div>
+      <div id="bar-wrap"><div id="bar"></div></div>
+      <div class="hint">Loading the sea&hellip;</div>
+    </div>
+
+    <div id="hud" hidden>
+      <div id="perf" class="panel">--</div>
+      <div id="compass" class="panel">N</div>
+      <div id="mode-tag" class="panel">On Foot &middot; 3rd Person</div>
+      <div id="vitals" class="panel">
+        <div class="meter hp"><span></span><div class="label">Health</div></div>
+        <div class="meter stam"><span></span><div class="label">Stamina</div></div>
+      </div>
+      <div id="levelbar" class="panel">
+        <div class="row"><span class="lv">Nv 1</span><span class="pct">0%</span></div>
+        <div id="xpmeter"><span></span></div>
+      </div>
+      <div id="levelup" class="panel">Nivel</div>
+      <div id="interact" class="panel"><b>F</b> &nbsp;<span class="txt">Hablar</span></div>
+      <div id="dialogue" class="panel">
+        <div class="who">Aldeano</div>
+        <div class="say">&hellip;</div>
+        <div class="next">F para continuar &middot; Esc para salir</div>
+      </div>
+      <div id="bossbar" class="panel">
+        <div class="bname">Jefe</div>
+        <div class="track"><span></span></div>
+      </div>
+      <div id="island-banner" class="panel">
+        <div class="n">Isla</div>
+        <div class="lv">Nv 1-10</div>
+      </div>
+      <div id="fruit-name" class="panel">
+        <span class="nm">Bara Bara</span>
+        <span class="rar">Común</span>
+        <span class="pas">Inmune a cortes</span>
+        <span class="xform">Transformado</span>
+      </div>
+      <div id="fruit" class="panel">
+        <div class="skill" data-slot="0"><div class="key">LMB</div><div class="name">Golpe</div><div class="cd"></div></div>
+        <div class="skill" data-slot="1"><div class="key">Z</div><div class="name">--</div><div class="cd"></div></div>
+        <div class="skill" data-slot="2"><div class="key">X</div><div class="name">--</div><div class="cd"></div></div>
+        <div class="skill" data-slot="3"><div class="key">C</div><div class="name">--</div><div class="cd"></div></div>
+        <div class="skill" data-slot="4"><div class="key">V</div><div class="name">--</div><div class="cd"></div></div>
+        <div class="skill ult" data-slot="5"><div class="key">T</div><div class="name">Ult</div><div class="cd"></div></div>
+      </div>
+      <div id="thor-charges" hidden>
+        <span class="pips"><i></i><i></i><i></i><i></i></span>
+        <span class="bar"><span></span></span>
+      </div>
+      <div id="haki">
+        <span class="icos">
+          <span class="ico armament">G</span>
+          <span class="ico observation">H</span>
+          <span class="ico haoshoku"><i class="cd"></i>B</span>
+        </span>
+        <span class="bar"><span></span></span>
+      </div>
+      <div id="reticle"></div>
+      <div id="controls-hint" class="panel">
+        WASD moverse &nbsp;&middot;&nbsp; Shift correr &nbsp;&middot;&nbsp; Espacio saltar (x3) &nbsp;&middot;&nbsp; Q dash (x2 en aire) &nbsp;&middot;&nbsp; Click der. mirar &nbsp;&middot;&nbsp; Alt shiftlock &nbsp;&middot;&nbsp; Click izq. golpear &nbsp;&middot;&nbsp; Z / X / C / V habilidades (al cursor) &nbsp;&middot;&nbsp; <b>T ULTIMATE</b> &nbsp;&middot;&nbsp; G/H Haki (Busoshoku/Kenbunshoku, mantener activo) &nbsp;&middot;&nbsp; B Haoshoku (un solo golpe, cooldown largo) &nbsp;&middot;&nbsp; R cambiar fruta &nbsp;&middot;&nbsp; F hablar &nbsp;&middot;&nbsp; M mapa &nbsp;&middot;&nbsp; E barco
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+# Render "Infrastructure as Code" config — https://render.com/docs/infrastructure-as-code
+#
+# One Web Service serves BOTH the built game (dist/, static files) and the
+# multiplayer WebSocket relay on the same port (see server/index.mjs) — so a
+# single free-tier service is all that's needed, no separate static site.
+#
+# Render Web Services support WebSockets out of the box; nothing extra is
+# needed to enable them (no special flag exists for this — it's automatic).
+#
+# Manual steps still required in the Render dashboard (can't be done from
+# code): create a Render account, connect this GitHub repo, and pick this
+# blueprint / the Free plan / a region. See the README section this file's
+# comment points to for the exact click-by-click steps.
+services:
+  - type: web
+    name: grand-line-voyage
+    runtime: node
+    plan: free
+    region: oregon             # pick whichever region dashboard offers that's closest to your players; free plan = single region, no fallback
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      # Only needed if you later host the client on a DIFFERENT origin than
+      # this service (e.g. GitHub Pages) — uncomment and set to that exact
+      # origin to restrict the /api/status endpoint's CORS. Leave unset
+      # (defaults to "*") for the normal same-origin setup.
+      # - key: ALLOWED_ORIGIN
+      #   value: https://your-client-domain.example
